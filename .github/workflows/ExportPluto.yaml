@@ -4,6 +4,7 @@ on:
         branches:
             - main
             - master
+            - static-export
     workflow_dispatch:
 
 jobs:
