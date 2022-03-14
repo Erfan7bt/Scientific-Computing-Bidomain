@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.17.3
+# v0.17.2
 
 using Markdown
 using InteractiveUtils
@@ -63,21 +63,32 @@ function flux(f,u,edge)
 end
 
 # ╔═╡ 64a70e08-dea2-40bc-8db9-cc3ced84ac2f
-function bcondition(f,u,bnode)
-	boundary_neumann!(f,u,bnode,species=1,region=1,value=0)
-	boundary_neumann!(f,u,bnode,species=1,region=2,value=0)
+function bcondition(f)
+	boundary_neumann!(f,species=1,region=1,value=0)
+	boundary_neumann!(f,species=1,region=2,value=0)
 	
-	boundary_neumann!(f,u,bnode,species=2,region=1,value=0)
-	boundary_neumann!(f,u,bnode,species=2,region=2,value=0)
+	boundary_neumann!(f,species=2,region=1,value=0)
+	boundary_neumann!(f,species=2,region=2,value=0)
 
-	boundary_dirichlet!(f,u,bnode,species=2,region=1,value=0)
+	boundary_dirichlet!(f,species=2,region=1,value=0)
 end
 
 # ╔═╡ 089b0d84-3c9f-499f-8e41-9e6e71b74036
-grid=simplexgrid(0:1:L)
+begin 
+	h=.04
+	grid=simplexgrid(0:h:L)
+end
 
 # ╔═╡ e6254f7d-afc6-4121-87f3-82954f3afbbd
-system=VoronoiFVM.System(grid; flux,reaction,storage,bcondition,species=[1,2,3])
+begin
+	physics = VoronoiFVM.Physics(storage=storage, flux=flux, reaction=reaction)
+	system=VoronoiFVM.System(grid, physics, unknown_storage=:sparse) 
+	enable_species!(system, species=[1,2,3])
+	bcondition(system)
+	system
+	
+	# system=VoronoiFVM.System(grid; flux,reaction,storage,bcondition,species=[1,2,3])
+end
 
 # ╔═╡ b38b57f6-ad80-4a50-b8bd-952d4d3e4866
 begin
