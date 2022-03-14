@@ -21,10 +21,13 @@ begin
 end;
 
 # ╔═╡ 45205568-95a6-4b91-9ff5-56bad64ae739
- ut(u0)=3*u0^3 + u0 + 2
+ ut(u0)=u0^3 + 3*u0 + 6
 
 # ╔═╡ 54b8a5a0-2ca5-4973-b7b4-35d420e675c2
-const u0=find_zero(ut,0)
+begin
+	const u0=find_zero(ut,0)
+	const v0= 2*u0 + 2
+end
 
 # ╔═╡ 71c4ba10-81c4-4e68-b24b-d27f60a205c1
 function fpeaku(x)
