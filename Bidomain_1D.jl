@@ -48,7 +48,7 @@ end
 
 # ╔═╡ 7a367571-9e02-4449-808a-c319997c3df9
 function reaction(f,u,node)
-    f[1]=(-1/e)*(u[1]-u[1]^3-u[3])
+    f[1]=(-1/e)*(u[1]-u[1]^3/3-u[3])
 	f[2]=0
 	f[3]=-e*(u[1]+beta-gama*u[3])
 end
