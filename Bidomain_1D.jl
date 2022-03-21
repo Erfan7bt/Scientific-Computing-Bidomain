@@ -4,59 +4,90 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
 # ╔═╡ 2595b432-a4bc-4f64-856b-c44851122a14
 begin 
-    using Plots, Roots ,PlutoUI,HypertextLiteral, ExtendableGrids, VoronoiFVM, PlutoVista,GridVisualize,LinearAlgebra
+    using PlutoUI, Plots, Roots ,PlutoUI,HypertextLiteral,
+	ExtendableGrids,VoronoiFVM, PlutoVista,GridVisualize,LinearAlgebra
 	default_plotter!(PlutoVista);
-end
+end;
+
+# ╔═╡ 62b11f3a-7d3d-4790-bacf-df10f297888d
+md"""
+ ### Parameters 
+"""
 
 # ╔═╡ 768f4e8d-a8f4-4f20-8b68-e180521edcff
 begin
-	const e=0.1
-	const beta=1
-	const gama=0.5
-	const sigma_i=1
-	const sigma_e=1
-	const L=70
+	 ϵ = 0.1
+	 β = 1
+	 γ = 0.5
+	 σᵢ = 1
+	 σₑ = 1
+	 L = 70
 end;
 
-# ╔═╡ 45205568-95a6-4b91-9ff5-56bad64ae739
- ut(u0)=u0^3 + 3*u0 + 6
+# ╔═╡ 6dcd9399-8bd2-48a6-8e06-5af201d4f730
+md"""
+### Initial Condition
+"""
 
 # ╔═╡ 54b8a5a0-2ca5-4973-b7b4-35d420e675c2
 begin
-	const u0=find_zero(ut,0)
-	const v0= 2*u0 + 2
-end
+	 ut(u0)=u0^3 + 3*u0 + 6
+	 u₀=find_zero(ut,0)
+	 v₀= 2*u₀ + 2
+end;
 
 # ╔═╡ a0249b52-5f13-4d37-9709-a069b065278d
 function u_init(x)
-	u = u0; v = v0
+	u = u₀; v = v₀
 		if 0 ≤ x ≤ L/20
 			u = 2
 		end
-		ue = 0
-		return [u, ue, v]
+		uₑ = 0
+		return [u, uₑ, v]
 	end
+
+# ╔═╡ 9b06c02d-ec46-4590-acac-821733809c6f
+md"""
+### Problrm Implementation in VoronoiFVM
+ #### Physic Defintion
+"""
 
 # ╔═╡ bb37d88a-13e4-4a8d-a852-175d34a06afd
 function storage(f,u,node)
-	f[1]=u[1]
-	f[2]=0
-	f[3]=u[3]
+	f[1]= u[1]
+	f[2]= 0
+	f[3]= u[3]
 end
 
+# ╔═╡ adbc6875-1d0f-4e49-9abd-f12eced388ef
+begin 
+	f(u,v)= u - u^3/3 - v
+	g(u,v)= u + β - γ*v
+end;
+
 # ╔═╡ 7a367571-9e02-4449-808a-c319997c3df9
-function reaction(f,u,node)
-    f[1]=(-1/e)*(u[1]-u[1]^3/3-u[3])
-	f[2]=0
-	f[3]=-e*(u[1]+beta-gama*u[3])
+function reaction(y,u,node)
+    y[1]= -f(u[1],u[3])/ϵ
+	y[2]= 0
+	y[3]= -ϵ*g(u[1],u[3])
 end
 
 # ╔═╡ b484a050-2e8a-4a0f-b975-62692be5cea9
 function flux(f,u,edge)
-	f[1]=-sigma_i*((u[1,2]-u[1,1])+(u[2,2]-u[2,1]))
-	f[2]=sigma_i*(u[1,2]-u[1,1])+(sigma_i+sigma_e)*(u[2,2]-u[2,1])
+	f[1]=-σᵢ*((u[1,2]-u[1,1])+(u[2,2]-u[2,1]))
+	f[2]=σᵢ*(u[1,2]-u[1,1])+(σᵢ+σₑ)*(u[2,2]-u[2,1])
 	f[3]=0
 end
 
@@ -66,6 +97,11 @@ function breaction(f,u,node)
 			f[2] = 0
 		end
 end
+
+# ╔═╡ 593f1fa3-ce33-41b1-aaa6-492d13a6584a
+md"""
+### Boundary Condition 
+"""
 
 # ╔═╡ 64a70e08-dea2-40bc-8db9-cc3ced84ac2f
 function bcondition(f)
@@ -87,12 +123,22 @@ end
 # ╔═╡ b38b57f6-ad80-4a50-b8bd-952d4d3e4866
 function bidomain_1D(;N=100, Δt=1e-1, T=30, Plotter=Plots)
 	grid = grid_1D(N)
-
-	physics = VoronoiFVM.Physics(storage=storage, flux=flux, reaction=reaction, breaction=breaction)
-	system=VoronoiFVM.System(grid, physics, unknown_storage=:sparse) 
+    
+	#system Def
+	
+	physics = VoronoiFVM.Physics(
+		storage=storage, flux=flux, reaction=reaction, breaction=breaction)
+	
+	system=VoronoiFVM.System(
+		grid, physics, unknown_storage=:sparse) 
+	
 	enable_species!(system, species=[1,2,3])
+	
 	bcondition(system)
+	
 	system
+
+	# Solving ODE
 	
 	init = unknowns(system)
 	
@@ -113,19 +159,22 @@ end
 
 # ╔═╡ 6e2fab73-30a8-4209-ba55-529f9c77cbc3
 begin 
-	N = 1000; Δt = 1e-1;
+	N = 500; Δt = 1e-1;
 	grid, tgrid, sol, vis, system= bidomain_1D(N=N, Δt=Δt);
 	system
 end
 
+# ╔═╡ e087e718-5cfc-4c8d-aa33-3a1f54bd5762
+@bind time PlutoUI.Slider(0:30,show_value=true)
+
 # ╔═╡ 89bc3729-2ffa-447b-bcea-6d1594e7a8f9
 begin
 	species = ["u", "u_e", "v"]
-    tₛ = Int16(round(11/Δt))+1
+    tₛ = Int16(round(time/Δt))+1
     scalarplot!(vis, grid, sol[1,:,tₛ], linestyle=:solid)
     scalarplot!(vis, grid, sol[2,:,tₛ], linestyle=:dash)
     plotted_sol = scalarplot!(vis, grid, sol[3,:,tₛ], linestyle=:dot, legend=:best, 
-    show=true, title="1D problem at t")
+    show=true, title=" Bidomain Sol at time = $(time) ")
     for (i,spec) ∈ zip(2 .* (1:length(species)), species)
      	plotted_sol[1][i][:label] = spec
     end
@@ -133,63 +182,6 @@ begin
 	Plots.plot!(ylims=(-2.5,2.5))
 	plotted_sol
 end
-
-# ╔═╡ 8d107906-2602-4b66-b43c-0f104e3c99c9
-
-
-# ╔═╡ 77b2bb08-5119-4fa3-93f7-c0454e271fec
-
-
-# ╔═╡ 34d4a9a9-cd78-4c51-b31d-5076a999ccc1
-
-
-# ╔═╡ 929a0af1-9885-43b6-b3dd-c48adab1fec3
-
-
-# ╔═╡ c061b365-f4c0-4a0d-ae1e-ebbe02933fd8
-
-
-# ╔═╡ a94a67fd-d601-4b7c-9268-f074ec16b3ab
-
-
-# ╔═╡ 1494e1ce-091c-45b3-a13e-913916428cd0
-
-
-# ╔═╡ 7e82e026-46ac-4ae0-9e48-6f9eaafb552e
-
-
-# ╔═╡ f56883e1-1f90-4e06-9dc8-0fc7072f9bca
-
-
-# ╔═╡ 80f355e8-3b01-4cb1-80b4-0ab9ad971001
-
-
-# ╔═╡ e1bc4952-5f0d-4075-a52c-33d986923382
-
-
-# ╔═╡ b91a034f-71ca-4b14-abfc-ba9e7bf8c4c0
-
-
-# ╔═╡ 2b3e6ecf-1c89-4352-8bb5-da544d67996c
-
-
-# ╔═╡ 1ed30a3d-809e-4ecd-9ba4-38d28b49c740
-
-
-# ╔═╡ bb45869a-fa3c-4dc1-a04f-d718d197375c
-
-
-# ╔═╡ 08f41fc5-deff-4286-9b6c-e303f4f03ce6
-
-
-# ╔═╡ 293478ce-92d6-4f91-852a-f7626f4b9bd7
-
-
-# ╔═╡ 62fc61bd-886b-467e-9116-204278760c21
-
-
-# ╔═╡ c3fb483b-a46d-4781-89bb-fdaaeec6946e
-
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1589,37 +1581,23 @@ version = "0.9.1+5"
 
 # ╔═╡ Cell order:
 # ╠═2595b432-a4bc-4f64-856b-c44851122a14
+# ╟─62b11f3a-7d3d-4790-bacf-df10f297888d
 # ╠═768f4e8d-a8f4-4f20-8b68-e180521edcff
-# ╠═45205568-95a6-4b91-9ff5-56bad64ae739
+# ╟─6dcd9399-8bd2-48a6-8e06-5af201d4f730
 # ╠═54b8a5a0-2ca5-4973-b7b4-35d420e675c2
 # ╠═a0249b52-5f13-4d37-9709-a069b065278d
+# ╟─9b06c02d-ec46-4590-acac-821733809c6f
 # ╠═bb37d88a-13e4-4a8d-a852-175d34a06afd
+# ╠═adbc6875-1d0f-4e49-9abd-f12eced388ef
 # ╠═7a367571-9e02-4449-808a-c319997c3df9
 # ╠═b484a050-2e8a-4a0f-b975-62692be5cea9
 # ╠═7528709e-39f3-462a-8845-5ee2c78dec7e
+# ╟─593f1fa3-ce33-41b1-aaa6-492d13a6584a
 # ╠═64a70e08-dea2-40bc-8db9-cc3ced84ac2f
 # ╠═089b0d84-3c9f-499f-8e41-9e6e71b74036
 # ╠═b38b57f6-ad80-4a50-b8bd-952d4d3e4866
 # ╠═6e2fab73-30a8-4209-ba55-529f9c77cbc3
+# ╠═e087e718-5cfc-4c8d-aa33-3a1f54bd5762
 # ╠═89bc3729-2ffa-447b-bcea-6d1594e7a8f9
-# ╠═8d107906-2602-4b66-b43c-0f104e3c99c9
-# ╠═77b2bb08-5119-4fa3-93f7-c0454e271fec
-# ╠═34d4a9a9-cd78-4c51-b31d-5076a999ccc1
-# ╠═929a0af1-9885-43b6-b3dd-c48adab1fec3
-# ╠═c061b365-f4c0-4a0d-ae1e-ebbe02933fd8
-# ╠═a94a67fd-d601-4b7c-9268-f074ec16b3ab
-# ╠═1494e1ce-091c-45b3-a13e-913916428cd0
-# ╠═7e82e026-46ac-4ae0-9e48-6f9eaafb552e
-# ╠═f56883e1-1f90-4e06-9dc8-0fc7072f9bca
-# ╠═80f355e8-3b01-4cb1-80b4-0ab9ad971001
-# ╠═e1bc4952-5f0d-4075-a52c-33d986923382
-# ╠═b91a034f-71ca-4b14-abfc-ba9e7bf8c4c0
-# ╠═2b3e6ecf-1c89-4352-8bb5-da544d67996c
-# ╠═1ed30a3d-809e-4ecd-9ba4-38d28b49c740
-# ╠═bb45869a-fa3c-4dc1-a04f-d718d197375c
-# ╠═08f41fc5-deff-4286-9b6c-e303f4f03ce6
-# ╠═293478ce-92d6-4f91-852a-f7626f4b9bd7
-# ╠═62fc61bd-886b-467e-9116-204278760c21
-# ╠═c3fb483b-a46d-4781-89bb-fdaaeec6946e
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
