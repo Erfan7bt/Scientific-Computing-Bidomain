@@ -108,8 +108,8 @@ function bcondition(f)
 	boundary_neumann!(f,species=1,region=1,value=0)
 	boundary_neumann!(f,species=1,region=2,value=0)
 
-	boundary_neumann!(f,species=3,region=1,value=0)
-	boundary_neumann!(f,species=3,region=2,value=0)
+	boundary_neumann!(f,species=2,region=1,value=0)
+	boundary_neumann!(f,species=2,region=2,value=0)
 
 	boundary_dirichlet!(f,species=2,region=1,value=0)
 end
