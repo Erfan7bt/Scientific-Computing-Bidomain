@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.2
+# v0.17.2
 
 using Markdown
 using InteractiveUtils
@@ -19,6 +19,13 @@ begin
     using PlutoUI, Plots, Roots ,PlutoUI,HypertextLiteral,
 	ExtendableGrids,VoronoiFVM, PlutoVista,GridVisualize,LinearAlgebra
 	default_plotter!(PlutoVista);
+
+	using ShortCodes, ExtendableGrids, VoronoiFVM, PlutoVista
+	using Plots, GridVisualize, PlutoUI, LaTeXStrings, PyPlot
+	using PyCall, CSV, DataFrames
+	# GridVisualize.default_plotter!(Plots);
+	pyplot();
+	TableOfContents();
 end;
 
 # ╔═╡ 62b11f3a-7d3d-4790-bacf-df10f297888d
@@ -104,7 +111,7 @@ md"""
 """
 
 # ╔═╡ 64a70e08-dea2-40bc-8db9-cc3ced84ac2f
-function bcondition(f)
+function bcondition_1d(f)
 	boundary_neumann!(f,species=1,region=1,value=0)
 	boundary_neumann!(f,species=1,region=2,value=0)
 
@@ -115,14 +122,14 @@ function bcondition(f)
 end
 
 # ╔═╡ 089b0d84-3c9f-499f-8e41-9e6e71b74036
-function grid_1D(N)
+function grid_1d(N)
 	X = LinRange(0,L,N)
 	return grid=simplexgrid(X)
 end
 
 # ╔═╡ b38b57f6-ad80-4a50-b8bd-952d4d3e4866
 function bidomain_1D(;N=100, Δt=1e-1, T=30, Plotter=Plots)
-	grid = grid_1D(N)
+	grid = grid_1d(N)
     
 	#system Def
 	
@@ -134,7 +141,7 @@ function bidomain_1D(;N=100, Δt=1e-1, T=30, Plotter=Plots)
 	
 	enable_species!(system, species=[1,2,3])
 	
-	bcondition(system)
+	bcondition_1d(system)
 	
 	system
 
@@ -183,27 +190,244 @@ begin
 	plotted_sol
 end
 
+# ╔═╡ 28dcd70a-952d-492a-84f8-ee04eb83e360
+function plot_at_t(t,vis,xgrid,sol)
+	species = ["u", "u_e", "v"]
+	tₛ = Int16(round(t/Δt))+1
+	scalarplot!(vis, xgrid, sol[1,:,tₛ], linestyle=:solid)
+	scalarplot!(vis, xgrid, sol[2,:,tₛ], linestyle=:dash)
+	plotted_sol = scalarplot!(
+		vis, xgrid, sol[3,:,tₛ], linestyle=:dot, legend=:best, show=true)
+	for (i,spec) ∈ zip(2 .* (1:length(species)), species)
+		plotted_sol[1][i][:label] = spec
+	end
+	Plots.plot!(labels=species)
+	Plots.plot!(ylims=(-2.5,2.5))
+	plotted_sol
+end
+
+# ╔═╡ 6cb4c6ac-c8a4-412f-be49-87e00d3fd8b4
+begin
+	N2 = 500; dt = 1e-1;
+	xgrid, tgrid2, sol2, vis2, system2 = bidomain_1D(N=N2, Δt=dt);
+	system
+end
+
+# ╔═╡ e7cc8d45-4816-4623-9d4e-0d84d78c8fd2
+begin
+	anim = @animate for t in 0:Δt*5:20
+		plot_at_t(t,vis2,xgrid,sol2)
+	end
+	gif(anim, "../movies/1D_solution.gif", fps=15)
+end
+
+# ╔═╡ 4e4d7694-43f3-4eeb-abe0-e02737470c98
+
+
+# ╔═╡ 93b440aa-f2e6-4e1a-ad74-733663e471a3
+
+
+# ╔═╡ 9c87d5d1-041d-4d07-8cbd-839c5d3dec51
+
+
+# ╔═╡ 6d06a914-bf53-43a3-9946-c91d03b57b51
+
+
+# ╔═╡ 4156def2-6a71-46ce-b168-a6eec6bdd67d
+
+
+# ╔═╡ 1292fd7f-c14e-49e7-936f-c46bf7ea470b
+
+
+# ╔═╡ b10b2e0c-4b71-4cda-8022-4fb3c5426b6f
+
+
+# ╔═╡ aaeb5017-dddb-4c7e-9253-89ef1d65e628
+
+
+# ╔═╡ 68b9bd52-fcf2-49ee-af0e-b41a27096c57
+
+
+# ╔═╡ 65194fa2-a30c-4423-b5c6-eab8507af235
+""""
+	Create the 2d Grid
+"""
+function grid_2d(N)
+	X = LinRange(0,L,N[1])
+	Y = LinRange(0,L,N[2])
+	grid2d = simplexgrid(X,Y)
+	return grid2d
+end
+
+# ╔═╡ 6a2270d4-cb7c-41a1-a300-d87079666145
+"""
+Initialize the 2d problem
+"""
+function u⃗₀_2D(x,y)
+	u = u₀; v = v₀
+	if 0 ≤ x ≤ 3.5 && 0 ≤ y ≤ 70
+		u = 2
+	end
+	if 31 ≤ x ≤ 39 && 0 ≤ y ≤ 35
+		v = 2
+	end
+	uₑ = 0
+	return [u, uₑ, v]
+end
+
+
+# ╔═╡ 51d646e9-a066-4068-9598-b9673bdda8f8
+"""
+2D Boundaries
+"""
+function bcondition_2d(system)
+	for ispec ∈ [1 3]
+		for ibc=1:4 # 4 bounds in 2d
+			boundary_neumann!(system,ispec,ibc,0)
+			# Also a dirichlet or just neumann?
+		end
+	end
+end
+
+# ╔═╡ cbcbcfac-9e76-4a44-b2a9-40c4e8d089d6
+function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots)
+	grid = grid_2d(N)
+    
+	#system Def
+	
+	physics = VoronoiFVM.Physics(
+		storage=storage, flux=flux, reaction=reaction, breaction=breaction)
+	
+	system=VoronoiFVM.System(
+		grid, physics, unknown_storage=:sparse) 
+	
+	enable_species!(system, species=[1,2,3])
+	
+	bcondition_2d(system)
+	system
+
+	# Initial conditions:
+	init = unknowns(system)
+	inival = map(u_init, grid)
+	init .= [tuple[k] for tuple in inival, k in 1:3]'
+	U = unknowns(system)
+
+	# copied
+	inival = map(u⃗₀_2D, xgrid)
+	init .= [tuple[k] for tuple in inival, k in 1:3]'
+	for t ∈ 0:Δt:Tinit_solve
+		solve!(U, init, sys; tstep=Δt)
+		init .= U
+	end
+	# save_initial(init)
+	
+	SolArray = copy(init)
+	tgrid = 0:Δt:T
+	for t ∈ tgrid[2:end]
+		VoronoiFVM.solve!(U, init, system; tstep=Δt)
+		init .= U
+		SolArray = cat(SolArray, copy(U), dims=3)
+	end
+	vis = GridVisualizer(resolution=(400,300), dim=1, Plotter=Plots)
+    return grid, tgrid, SolArray, vis, system
+end
+
+# ╔═╡ 30f6a587-5ff9-4896-9291-2bdeeb0fdfb8
+function plot_species_3d(spec)
+	Xgrid = xgrid[Coordinates][:]; Tgrid = tgrid; Zgrid = sol[spec,:,:];
+	xstep = 1; tstep = 1;
+	Tgrid = Tgrid[1:xstep:end]; 
+	Xgrid = Xgrid[1:tstep:end]
+	Zgrid = Zgrid[1:tstep:end,1:xstep:end]; 
+	PyPlot.clf()
+	PyPlot.suptitle("Space-Time plot for "*species[spec])
+	PyPlot.surf(Xgrid,Tgrid,Zgrid',cmap=:coolwarm) # 3D surface plot
+	ax=PyPlot.gca(projection="3d")  # Obtain 3D plot axes
+	α = 30; β = 240
+	ax.view_init(α,β) # Adjust viewing angles
+
+	
+	PyPlot.xlabel(L"X")
+	PyPlot.ylabel(L"T")
+	PyPlot.zlabel(L"u")
+	figure=PyPlot.gcf()
+	figure.set_size_inches(7,7)
+	figure
+end
+
+# ╔═╡ f4b9b7a9-15d6-496d-87cd-ba86f151a4c7
+function contour_plot(spec)
+	PyPlot.clf()
+	Xgrid = xgrid[Coordinates][:]
+	Tgrid = tgrid
+	Zgrid = sol[spec,:,:]
+	PyPlot.suptitle("Space-time contour plot of "*species[spec])
+	
+	PyPlot.contourf(Xgrid,Tgrid,Zgrid',cmap="hot",levels=100)
+	axes=PyPlot.gca()
+	axes.set_aspect(2)
+	PyPlot.colorbar()
+
+	PyPlot.size(600,600)
+	PyPlot.xlabel(L"x")
+	PyPlot.ylabel(L"t")
+	figure=PyPlot.gcf()
+	figure.set_size_inches(7,7)
+	PyPlot.savefig("../img/st_contour_plot_species_"*string(spec))
+	figure
+end
+
+# ╔═╡ e6ab7227-f1fe-4ef8-b693-8a8127b343af
+
+
+plot_species_3d(1)
+
+# ╔═╡ ee2ff454-38a4-44ab-af42-d519f708c65c
+plot_species_3d(2)
+
+# ╔═╡ 6bcd663d-0c0a-4c7d-b6b9-466214b71295
+plot_species_3d(3)
+
+# ╔═╡ 5ec24e72-9fbc-45dc-896a-d24f2d9aca23
+begin
+	N₂ = (100,25); Δt₂ = 1e-1;
+	T=1 # ?
+	xgrid₂, tgrid₂, sol₂, vis₂ = bidomain_2d(N=N₂,T=T, Δt=Δt₂, Plotter=PyPlot);
+end;
+
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 ExtendableGrids = "cfc395e8-590f-11e8-1f13-43a2532b2fa8"
 GridVisualize = "5eed8a63-0fb0-45eb-886d-8d5a387d12b8"
 HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
+LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 PlutoVista = "646e1f28-b900-46d7-9d87-d554eb38a413"
+PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
+PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
+ShortCodes = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
 VoronoiFVM = "82b139dc-5afc-11e9-35da-9b9bdfd336f3"
 
 [compat]
+CSV = "~0.10.3"
+DataFrames = "~1.3.2"
 ExtendableGrids = "~0.9.1"
 GridVisualize = "~0.5.1"
 HypertextLiteral = "~0.9.3"
+LaTeXStrings = "~1.3.0"
 Plots = "~1.27.0"
 PlutoUI = "~0.7.37"
 PlutoVista = "~0.8.12"
+PyCall = "~1.93.1"
+PyPlot = "~2.10.0"
 Roots = "~1.3.14"
+ShortCodes = "~0.3.3"
 VoronoiFVM = "~0.16.2"
 """
 
@@ -281,6 +505,12 @@ git-tree-sha1 = "19a35467a82e236ff51bc17a3a44b69ef35185a2"
 uuid = "6e34b625-4abd-537c-b88f-471c36dfa7a0"
 version = "1.0.8+0"
 
+[[CSV]]
+deps = ["CodecZlib", "Dates", "FilePathsBase", "InlineStrings", "Mmap", "Parsers", "PooledArrays", "SentinelArrays", "Tables", "Unicode", "WeakRefStrings"]
+git-tree-sha1 = "9310d9495c1eb2e4fa1955dd478660e2ecab1fbb"
+uuid = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+version = "0.10.3"
+
 [[Cairo_jll]]
 deps = ["Artifacts", "Bzip2_jll", "Fontconfig_jll", "FreeType2_jll", "Glib_jll", "JLLWrappers", "LZO_jll", "Libdl", "Pixman_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libXrender_jll", "Zlib_jll", "libpng_jll"]
 git-tree-sha1 = "4b859a208b2397a7a623a03449e4636bdb17bcf2"
@@ -304,6 +534,12 @@ deps = ["ChainRulesCore", "LinearAlgebra", "Test"]
 git-tree-sha1 = "bf98fa45a0a4cee295de98d4c1462be26345b9a1"
 uuid = "9e997f8a-9a97-42d5-a9f1-ce6bfc15e2c0"
 version = "0.1.2"
+
+[[CodecZlib]]
+deps = ["TranscodingStreams", "Zlib_jll"]
+git-tree-sha1 = "ded953804d019afa9a3f98981d99b33e3db7b6da"
+uuid = "944b1d66-785c-5afd-91f1-9de20f533193"
+version = "0.7.0"
 
 [[ColorSchemes]]
 deps = ["ColorTypes", "Colors", "FixedPointNumbers", "Random"]
@@ -359,6 +595,12 @@ git-tree-sha1 = "455419f7e328a1a2493cabc6428d79e951349769"
 uuid = "a33af91c-f02d-484b-be07-31d278c5ca2b"
 version = "0.1.1"
 
+[[Conda]]
+deps = ["Downloads", "JSON", "VersionParsing"]
+git-tree-sha1 = "6e47d11ea2776bc5627421d59cdcc1296c058071"
+uuid = "8f4d0f93-b110-5947-807f-2305c1781a2d"
+version = "1.7.0"
+
 [[ConstructionBase]]
 deps = ["LinearAlgebra"]
 git-tree-sha1 = "f74e9d5388b8620b4cee35d4c5a618dd4dc547f4"
@@ -371,10 +613,21 @@ git-tree-sha1 = "9f02045d934dc030edad45944ea80dbd1f0ebea7"
 uuid = "d38c429a-6771-53c6-b99e-75d170b6e991"
 version = "0.5.7"
 
+[[Crayons]]
+git-tree-sha1 = "249fe38abf76d48563e2f4556bebd215aa317e15"
+uuid = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
+version = "4.1.1"
+
 [[DataAPI]]
 git-tree-sha1 = "cc70b17275652eb47bc9e5f81635981f13cea5c8"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 version = "1.9.0"
+
+[[DataFrames]]
+deps = ["Compat", "DataAPI", "Future", "InvertedIndices", "IteratorInterfaceExtensions", "LinearAlgebra", "Markdown", "Missings", "PooledArrays", "PrettyTables", "Printf", "REPL", "Reexport", "SortingAlgorithms", "Statistics", "TableTraits", "Tables", "Unicode"]
+git-tree-sha1 = "ae02104e835f219b8930c7664b8012c93475c340"
+uuid = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+version = "1.3.2"
 
 [[DataStructures]]
 deps = ["Compat", "InteractiveUtils", "OrderedCollections"]
@@ -514,6 +767,12 @@ deps = ["Pkg", "Requires", "UUIDs"]
 git-tree-sha1 = "80ced645013a5dbdc52cf70329399c35ce007fae"
 uuid = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
 version = "1.13.0"
+
+[[FilePathsBase]]
+deps = ["Compat", "Dates", "Mmap", "Printf", "Test", "UUIDs"]
+git-tree-sha1 = "129b104185df66e408edd6625d480b7f9e9823a0"
+uuid = "48062228-2e41-5def-b9a4-89aafe57970f"
+version = "0.9.18"
 
 [[FillArrays]]
 deps = ["LinearAlgebra", "Random", "SparseArrays", "Statistics"]
@@ -681,6 +940,12 @@ git-tree-sha1 = "4da0f88e9a39111c2fa3add390ab15f3a44f3ca3"
 uuid = "22cec73e-a1b8-11e9-2c92-598750a2cf9c"
 version = "0.3.1"
 
+[[InlineStrings]]
+deps = ["Parsers"]
+git-tree-sha1 = "61feba885fac3a407465726d0c330b3055df897f"
+uuid = "842dd82b-1e85-43dc-bf29-5d0ee9dffc48"
+version = "1.1.2"
+
 [[InteractiveUtils]]
 deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
@@ -696,6 +961,11 @@ deps = ["Test"]
 git-tree-sha1 = "91b5dcf362c5add98049e6c29ee756910b03051d"
 uuid = "3587e190-3f89-42d0-90ee-14403ec27112"
 version = "0.1.3"
+
+[[InvertedIndices]]
+git-tree-sha1 = "bee5f1ef5bf65df56bdd2e40447590b272a5471f"
+uuid = "41ab1584-1d38-5bbf-9106-f11c6c58b48f"
+version = "1.1.0"
 
 [[IrrationalConstants]]
 git-tree-sha1 = "7fd44fd4ff43fc60815f8e764c0f352b83c49151"
@@ -735,6 +1005,12 @@ deps = ["Dates", "Mmap", "Parsers", "Unicode"]
 git-tree-sha1 = "3c837543ddb02250ef42f4738347454f95079d4e"
 uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 version = "0.21.3"
+
+[[JSON3]]
+deps = ["Dates", "Mmap", "Parsers", "StructTypes", "UUIDs"]
+git-tree-sha1 = "8c1f668b24d999fb47baf80436194fdccec65ad2"
+uuid = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+version = "1.9.4"
 
 [[JpegTurbo_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
@@ -845,7 +1121,7 @@ uuid = "38a345b3-de98-5d2b-a5d3-14cd9215e700"
 version = "2.36.0+0"
 
 [[LinearAlgebra]]
-deps = ["Libdl", "libblastrampoline_jll"]
+deps = ["Libdl"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [[LogExpFunctions]]
@@ -881,6 +1157,12 @@ uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
 git-tree-sha1 = "e498ddeee6f9fdb4551ce855a46f54dbd900245f"
 uuid = "442fdcdd-2543-5da2-b0f3-8c86c306513e"
 version = "0.3.1"
+
+[[Memoize]]
+deps = ["MacroTools"]
+git-tree-sha1 = "2b1dfcba103de714d31c033b5dacc2e4a12c7caa"
+uuid = "c03570c3-d221-55d1-a50c-7939bbd78826"
+version = "0.4.4"
 
 [[Metatheory]]
 deps = ["AutoHashEquals", "DataStructures", "Dates", "DocStringExtensions", "Parameters", "Reexport", "TermInterface", "ThreadsX", "TimerOutputs"]
@@ -936,10 +1218,6 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "887579a3eb005446d514ab7aeac5d1d027658b8f"
 uuid = "e7412a2a-1a6e-54c0-be00-318e2571c051"
 version = "1.3.5+1"
-
-[[OpenBLAS_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
-uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
 
 [[OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -1038,15 +1316,39 @@ git-tree-sha1 = "2435d1d3e02db324414f268f30999b5c06a0d10f"
 uuid = "646e1f28-b900-46d7-9d87-d554eb38a413"
 version = "0.8.12"
 
+[[PooledArrays]]
+deps = ["DataAPI", "Future"]
+git-tree-sha1 = "28ef6c7ce353f0b35d0df0d5930e0d072c1f5b9b"
+uuid = "2dfb63ee-cc39-5dd5-95bd-886bf059d720"
+version = "1.4.1"
+
 [[Preferences]]
 deps = ["TOML"]
 git-tree-sha1 = "d3538e7f8a790dc8903519090857ef8e1283eecd"
 uuid = "21216c6a-2e73-6563-6e65-726566657250"
 version = "1.2.5"
 
+[[PrettyTables]]
+deps = ["Crayons", "Formatting", "Markdown", "Reexport", "Tables"]
+git-tree-sha1 = "dfb54c4e414caa595a1f2ed759b160f5a3ddcba5"
+uuid = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
+version = "1.3.1"
+
 [[Printf]]
 deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
+[[PyCall]]
+deps = ["Conda", "Dates", "Libdl", "LinearAlgebra", "MacroTools", "Serialization", "VersionParsing"]
+git-tree-sha1 = "1fc929f47d7c151c839c5fc1375929766fb8edcc"
+uuid = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
+version = "1.93.1"
+
+[[PyPlot]]
+deps = ["Colors", "LaTeXStrings", "PyCall", "Sockets", "Test", "VersionParsing"]
+git-tree-sha1 = "14c1b795b9d764e1784713941e787e1384268103"
+uuid = "d330b81b-6aea-500a-939a-2ce795aea3ee"
+version = "2.10.0"
 
 [[Qt5Base_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "OpenSSL_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
@@ -1065,7 +1367,7 @@ deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
 uuid = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
 
 [[Random]]
-deps = ["SHA", "Serialization"]
+deps = ["Serialization"]
 uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [[RecipesBase]]
@@ -1147,6 +1449,12 @@ git-tree-sha1 = "0b4b7f1393cff97c33891da2a0bf69c6ed241fda"
 uuid = "6c6a2e73-6563-6170-7368-637461726353"
 version = "1.1.0"
 
+[[SentinelArrays]]
+deps = ["Dates", "Random"]
+git-tree-sha1 = "6a2f7d70512d205ca8c7ee31bfa9f142fe74310c"
+uuid = "91c51154-3ec4-41a3-a24f-3f23e20d615c"
+version = "1.3.12"
+
 [[Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 
@@ -1159,6 +1467,12 @@ version = "0.8.2"
 [[SharedArrays]]
 deps = ["Distributed", "Mmap", "Random", "Serialization"]
 uuid = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
+
+[[ShortCodes]]
+deps = ["Base64", "CodecZlib", "HTTP", "JSON3", "Memoize", "UUIDs"]
+git-tree-sha1 = "0fcc38215160e0a964e9b0f0c25dcca3b2112ad1"
+uuid = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
+version = "0.3.3"
 
 [[Showoff]]
 deps = ["Dates", "Grisu"]
@@ -1242,6 +1556,12 @@ deps = ["Adapt", "DataAPI", "StaticArrays", "Tables"]
 git-tree-sha1 = "57617b34fa34f91d536eb265df67c2d4519b8b98"
 uuid = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 version = "0.6.5"
+
+[[StructTypes]]
+deps = ["Dates", "UUIDs"]
+git-tree-sha1 = "d24a825a95a6d98c385001212dc9020d609f2d4f"
+uuid = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
+version = "1.8.1"
 
 [[SuiteSparse]]
 deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]
@@ -1346,6 +1666,11 @@ git-tree-sha1 = "34db80951901073501137bdbc3d5a8e7bbd06670"
 uuid = "41fe7b60-77ed-43a1-b4f0-825fd5a5650d"
 version = "0.1.2"
 
+[[VersionParsing]]
+git-tree-sha1 = "58d6e80b4ee071f5efd07fda82cb9fbe17200868"
+uuid = "81def892-9a0e-5fdd-b105-ffc91e053289"
+version = "1.3.0"
+
 [[VertexSafeGraphs]]
 deps = ["Graphs"]
 git-tree-sha1 = "8351f8d73d7e880bfc042a8b6922684ebeafb35c"
@@ -1369,6 +1694,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "4528479aa01ee1b3b4cd0e6faef0e04cf16466da"
 uuid = "2381bf8a-dfd0-557d-9999-79630e7b1b91"
 version = "1.25.0+0"
+
+[[WeakRefStrings]]
+deps = ["DataAPI", "InlineStrings", "Parsers"]
+git-tree-sha1 = "b1be2855ed9ed8eac54e5caff2afcdb442d52c23"
+uuid = "ea10d353-3f73-51f8-a26c-33c1cb351aa5"
+version = "1.4.2"
 
 [[XML2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libiconv_jll", "Pkg", "Zlib_jll"]
@@ -1530,10 +1861,6 @@ git-tree-sha1 = "5982a94fcba20f02f42ace44b9894ee2b140fe47"
 uuid = "0ac62f75-1d6f-5e53-bd7c-93b484bb37c0"
 version = "0.15.1+0"
 
-[[libblastrampoline_jll]]
-deps = ["Artifacts", "Libdl", "OpenBLAS_jll"]
-uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
-
 [[libfdk_aac_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "daacc84a041563f965be61859a36e17c4e4fcd55"
@@ -1599,5 +1926,27 @@ version = "0.9.1+5"
 # ╠═6e2fab73-30a8-4209-ba55-529f9c77cbc3
 # ╠═e087e718-5cfc-4c8d-aa33-3a1f54bd5762
 # ╠═89bc3729-2ffa-447b-bcea-6d1594e7a8f9
+# ╠═28dcd70a-952d-492a-84f8-ee04eb83e360
+# ╠═6cb4c6ac-c8a4-412f-be49-87e00d3fd8b4
+# ╠═e7cc8d45-4816-4623-9d4e-0d84d78c8fd2
+# ╠═4e4d7694-43f3-4eeb-abe0-e02737470c98
+# ╠═93b440aa-f2e6-4e1a-ad74-733663e471a3
+# ╠═9c87d5d1-041d-4d07-8cbd-839c5d3dec51
+# ╠═6d06a914-bf53-43a3-9946-c91d03b57b51
+# ╠═4156def2-6a71-46ce-b168-a6eec6bdd67d
+# ╠═1292fd7f-c14e-49e7-936f-c46bf7ea470b
+# ╠═b10b2e0c-4b71-4cda-8022-4fb3c5426b6f
+# ╠═aaeb5017-dddb-4c7e-9253-89ef1d65e628
+# ╠═68b9bd52-fcf2-49ee-af0e-b41a27096c57
+# ╠═65194fa2-a30c-4423-b5c6-eab8507af235
+# ╠═6a2270d4-cb7c-41a1-a300-d87079666145
+# ╠═51d646e9-a066-4068-9598-b9673bdda8f8
+# ╠═cbcbcfac-9e76-4a44-b2a9-40c4e8d089d6
+# ╠═30f6a587-5ff9-4896-9291-2bdeeb0fdfb8
+# ╠═f4b9b7a9-15d6-496d-87cd-ba86f151a4c7
+# ╠═e6ab7227-f1fe-4ef8-b693-8a8127b343af
+# ╠═ee2ff454-38a4-44ab-af42-d519f708c65c
+# ╠═6bcd663d-0c0a-4c7d-b6b9-466214b71295
+# ╠═5ec24e72-9fbc-45dc-896a-d24f2d9aca23
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
