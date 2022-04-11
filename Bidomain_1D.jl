@@ -18,12 +18,15 @@ end
 begin 
     using PlutoUI, Plots, Roots ,PlutoUI,HypertextLiteral,
 	ExtendableGrids,VoronoiFVM, PlutoVista,GridVisualize,LinearAlgebra
-	default_plotter!(PlutoVista);
+	
 
 	using ShortCodes, ExtendableGrids, VoronoiFVM, PlutoVista
 	using Plots, GridVisualize, PlutoUI, LaTeXStrings, PyPlot
 	using PyCall, CSV, DataFrames
-	# GridVisualize.default_plotter!(Plots);
+	
+	GridVisualize.default_plotter!(Plots);
+	# default_plotter!(PlutoVista);
+	
 	pyplot();
 	TableOfContents();
 end;
@@ -215,35 +218,13 @@ end
 
 # ╔═╡ e7cc8d45-4816-4623-9d4e-0d84d78c8fd2
 begin
-	anim = @animate for t in 0:Δt*5:20
+	tf = 15
+	step_size = 10*Δt
+	anim = @animate for t in 0:step_size:tf
 		plot_at_t(t,vis2,xgrid,sol2)
 	end
-	gif(anim, "../movies/1D_solution.gif", fps=15)
+	gif(anim)
 end
-
-# ╔═╡ 4e4d7694-43f3-4eeb-abe0-e02737470c98
-
-
-# ╔═╡ 93b440aa-f2e6-4e1a-ad74-733663e471a3
-
-
-# ╔═╡ 9c87d5d1-041d-4d07-8cbd-839c5d3dec51
-
-
-# ╔═╡ 6d06a914-bf53-43a3-9946-c91d03b57b51
-
-
-# ╔═╡ 4156def2-6a71-46ce-b168-a6eec6bdd67d
-
-
-# ╔═╡ 1292fd7f-c14e-49e7-936f-c46bf7ea470b
-
-
-# ╔═╡ b10b2e0c-4b71-4cda-8022-4fb3c5426b6f
-
-
-# ╔═╡ aaeb5017-dddb-4c7e-9253-89ef1d65e628
-
 
 # ╔═╡ 68b9bd52-fcf2-49ee-af0e-b41a27096c57
 
@@ -263,7 +244,7 @@ end
 """
 Initialize the 2d problem
 """
-function u⃗₀_2D(x,y)
+function u⃗₀_2d(x,y)
 	u = u₀; v = v₀
 	if 0 ≤ x ≤ 3.5 && 0 ≤ y ≤ 70
 		u = 2
@@ -280,10 +261,11 @@ end
 """
 2D Boundaries
 """
-function bcondition_2d(system)
-	for ispec ∈ [1 3]
-		for ibc=1:4 # 4 bounds in 2d
-			boundary_neumann!(system,ispec,ibc,0)
+function bcondition_2d(f)
+	for species ∈ [1 3] # Species 2 as well??
+		for region ∈ [1 2 3 4]
+			boundary_neumann!(f,species=species,region=region,value=0)
+			# TODO: Double-check these BCs
 			# Also a dirichlet or just neumann?
 		end
 	end
@@ -291,7 +273,7 @@ end
 
 # ╔═╡ cbcbcfac-9e76-4a44-b2a9-40c4e8d089d6
 function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots)
-	grid = grid_2d(N)
+	xgrid = grid_2d(N)
     
 	#system Def
 	
@@ -299,42 +281,55 @@ function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots)
 		storage=storage, flux=flux, reaction=reaction, breaction=breaction)
 	
 	system=VoronoiFVM.System(
-		grid, physics, unknown_storage=:sparse) 
+		xgrid, physics, unknown_storage=:sparse) 
 	
 	enable_species!(system, species=[1,2,3])
 	
 	bcondition_2d(system)
-	system
+	# system
 
 	# Initial conditions:
-	init = unknowns(system)
-	inival = map(u_init, grid)
-	init .= [tuple[k] for tuple in inival, k in 1:3]'
-	U = unknowns(system)
+	# inival = map(u_init, grid)
+	# init .= [tuple[k] for tuple in inival, k in 1:3]'
+	# U = unknowns(system)
 
 	# copied
-	inival = map(u⃗₀_2D, xgrid)
+	init = unknowns(system)
+	U = unknowns(system)
+	inival = map(u⃗₀_2d, xgrid)
 	init .= [tuple[k] for tuple in inival, k in 1:3]'
+	Tinit_solve=40  # What does this represent?
 	for t ∈ 0:Δt:Tinit_solve
-		solve!(U, init, sys; tstep=Δt)
+		VoronoiFVM.solve!(U, init, system; tstep=Δt)
 		init .= U
 	end
-	# save_initial(init)
+	
 	
 	SolArray = copy(init)
-	tgrid = 0:Δt:T
+	# tgrid = 0:Δt:T
+	tgrid = (Tinit_solve:Δt:T+Tinit_solve)
 	for t ∈ tgrid[2:end]
 		VoronoiFVM.solve!(U, init, system; tstep=Δt)
 		init .= U
 		SolArray = cat(SolArray, copy(U), dims=3)
 	end
 	vis = GridVisualizer(resolution=(400,300), dim=1, Plotter=Plots)
-    return grid, tgrid, SolArray, vis, system
+    return xgrid, tgrid, SolArray, vis, system
 end
 
+# ╔═╡ ceebe18c-2e85-4e5a-bcad-437bc60453b7
+begin
+	N₂ = (100,25); Δt₂ = 1e-1;
+	T=30
+	xgrid₂, tgrid₂, sol₂, vis₂, sys₂ = bidomain_2d(N=N₂,T=T, Δt=Δt₂, Plotter=PyPlot);
+end;
+
 # ╔═╡ 30f6a587-5ff9-4896-9291-2bdeeb0fdfb8
-function plot_species_3d(spec)
-	Xgrid = xgrid[Coordinates][:]; Tgrid = tgrid; Zgrid = sol[spec,:,:];
+function plot_species_3d_at_t(spec, t=0, Δt=1e-1, xgrid=xgrid, tgrid=tgrid, sol=sol)
+	tₛ = Int16(round(t/Δt))+1
+	Xgrid = xgrid[Coordinates][:]; Tgrid = tgrid; 
+	Zgrid = sol[spec,:,:]
+	# Zgrid = sol[spec,:,tₛ]
 	xstep = 1; tstep = 1;
 	Tgrid = Tgrid[1:xstep:end]; 
 	Xgrid = Xgrid[1:tstep:end]
@@ -373,27 +368,64 @@ function contour_plot(spec)
 	PyPlot.ylabel(L"t")
 	figure=PyPlot.gcf()
 	figure.set_size_inches(7,7)
-	PyPlot.savefig("../img/st_contour_plot_species_"*string(spec))
+	# PyPlot.savefig("../img/st_contour_plot_species_"*string(spec))
 	figure
 end
 
+# ╔═╡ c4cfe669-215a-47a3-b10f-40153e2aa3b1
+contour_plot(1)
+
 # ╔═╡ e6ab7227-f1fe-4ef8-b693-8a8127b343af
-
-
-plot_species_3d(1)
+plot_species_3d_at_t(1)
 
 # ╔═╡ ee2ff454-38a4-44ab-af42-d519f708c65c
-plot_species_3d(2)
+plot_species_3d_at_t(2)
 
 # ╔═╡ 6bcd663d-0c0a-4c7d-b6b9-466214b71295
-plot_species_3d(3)
+plot_species_3d_at_t(3)
 
-# ╔═╡ 5ec24e72-9fbc-45dc-896a-d24f2d9aca23
+
+# ╔═╡ 8e6b3aea-fef4-4913-bc8e-c37745dae401
+# plot_species_3d_at_t(2,3,Δt₂,xgrid₂,sol₂)
+
+# ╔═╡ fbb358fc-95b9-49f1-9737-d2f84c9d5a96
+function contour_2d_at_t(spec, t, Δt, xgrid, sol)
+	tₛ = Int16(round(t/Δt))+1
+	print(string("ts is", tₛ))
+	p = scalarplot(
+		xgrid,sol[spec,:,tₛ], Plotter=PyPlot, colormap=:hot, 
+		title="2D problem with 1D problem setup for "*species[spec]*
+		" at t="*string(t),
+		colorlevels=100, isolines=0)
+	p.set_size_inches(7,7)
+	PyPlot.xlabel(L"x")
+	PyPlot.ylabel(L"y")
+	p
+end
+
+# ╔═╡ 662dc745-94d3-4416-85da-49f380d98277
+contour_2d_at_t(2,0,Δt₂,xgrid₂,sol₂)
+
+# ╔═╡ 402015b0-0890-4e99-ab60-71f6e100ac50
+contour_2d_at_t(1,0,Δt₂,xgrid₂,sol₂)
+
+# ╔═╡ 4b7a7dbf-c199-49ae-8d41-95d101228b04
+# begin
+# 	anim2 = @animate for t in 0:Δt*10:tf
+# 		# contour_2d_at_t(2,t,Δt₂,xgrid₂,sol₂)
+# 		plot_species_3d_at_t(2,t,Δt₂,xgrid₂,sol₂)
+# 	end
+# 	gif(anim2)
+# end
+
+# ╔═╡ b1cb7a29-aa58-4016-93b6-383e7e4aff82
 begin
-	N₂ = (100,25); Δt₂ = 1e-1;
-	T=1 # ?
-	xgrid₂, tgrid₂, sol₂, vis₂ = bidomain_2d(N=N₂,T=T, Δt=Δt₂, Plotter=PyPlot);
-end;
+	anim2 = @animate for t in 0:Δt*10:tf
+		contour_2d_at_t(2,t,Δt₂,xgrid₂,sol₂)
+		# plot_species_3d_at_t(2,t,Δt₂,xgrid₂,sol₂)
+	end
+	gif(anim2)
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1929,24 +1961,23 @@ version = "0.9.1+5"
 # ╠═28dcd70a-952d-492a-84f8-ee04eb83e360
 # ╠═6cb4c6ac-c8a4-412f-be49-87e00d3fd8b4
 # ╠═e7cc8d45-4816-4623-9d4e-0d84d78c8fd2
-# ╠═4e4d7694-43f3-4eeb-abe0-e02737470c98
-# ╠═93b440aa-f2e6-4e1a-ad74-733663e471a3
-# ╠═9c87d5d1-041d-4d07-8cbd-839c5d3dec51
-# ╠═6d06a914-bf53-43a3-9946-c91d03b57b51
-# ╠═4156def2-6a71-46ce-b168-a6eec6bdd67d
-# ╠═1292fd7f-c14e-49e7-936f-c46bf7ea470b
-# ╠═b10b2e0c-4b71-4cda-8022-4fb3c5426b6f
-# ╠═aaeb5017-dddb-4c7e-9253-89ef1d65e628
 # ╠═68b9bd52-fcf2-49ee-af0e-b41a27096c57
 # ╠═65194fa2-a30c-4423-b5c6-eab8507af235
 # ╠═6a2270d4-cb7c-41a1-a300-d87079666145
 # ╠═51d646e9-a066-4068-9598-b9673bdda8f8
 # ╠═cbcbcfac-9e76-4a44-b2a9-40c4e8d089d6
+# ╠═ceebe18c-2e85-4e5a-bcad-437bc60453b7
 # ╠═30f6a587-5ff9-4896-9291-2bdeeb0fdfb8
 # ╠═f4b9b7a9-15d6-496d-87cd-ba86f151a4c7
+# ╠═c4cfe669-215a-47a3-b10f-40153e2aa3b1
 # ╠═e6ab7227-f1fe-4ef8-b693-8a8127b343af
 # ╠═ee2ff454-38a4-44ab-af42-d519f708c65c
 # ╠═6bcd663d-0c0a-4c7d-b6b9-466214b71295
-# ╠═5ec24e72-9fbc-45dc-896a-d24f2d9aca23
+# ╠═8e6b3aea-fef4-4913-bc8e-c37745dae401
+# ╠═fbb358fc-95b9-49f1-9737-d2f84c9d5a96
+# ╠═662dc745-94d3-4416-85da-49f380d98277
+# ╠═402015b0-0890-4e99-ab60-71f6e100ac50
+# ╠═4b7a7dbf-c199-49ae-8d41-95d101228b04
+# ╠═b1cb7a29-aa58-4016-93b6-383e7e4aff82
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
