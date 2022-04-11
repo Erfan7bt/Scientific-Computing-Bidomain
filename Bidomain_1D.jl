@@ -299,8 +299,8 @@ function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots)
 	init .= [tuple[k] for tuple in inival, k in 1:3]'
 
 	# If we want to do the "initial @ 40" that the paper does:
-	# Tinit_solve=40  
 	Tinit_solve=0
+	# Tinit_solve=40  
 	# for t ∈ 0:Δt:Tinit_solve
 	# 	VoronoiFVM.solve!(U, init, system; tstep=Δt)
 	# 	init .= U
@@ -315,14 +315,14 @@ function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots)
 		init .= U
 		SolArray = cat(SolArray, copy(U), dims=3)
 	end
-	vis = GridVisualizer(resolution=(400,300), dim=2, Plotter=Plots)
+	vis = GridVisualizer(resolution=(400,300), dim=1, Plotter=Plots)
     return xgrid, tgrid, SolArray, vis, system
 end
 
 # ╔═╡ ceebe18c-2e85-4e5a-bcad-437bc60453b7
 begin
 	N₂ = (100,25); Δt₂ = 1e-1;
-	T=30
+	T= 70
 	xgrid₂, tgrid₂, sol₂, vis₂, sys₂ = bidomain_2d(N=N₂,T=T, Δt=Δt₂, Plotter=PyPlot);
 end;
 
