@@ -219,15 +219,12 @@ end
 # ╔═╡ e7cc8d45-4816-4623-9d4e-0d84d78c8fd2
 begin
 	tf = 15
-	step_size = 10*Δt
+	step_size =3*Δt
 	anim = @animate for t in 0:step_size:tf
 		plot_at_t(t,vis2,xgrid,sol2)
 	end
-	gif(anim)
+	gif(anim, "../1D_scalar.gif")
 end
-
-# ╔═╡ 68b9bd52-fcf2-49ee-af0e-b41a27096c57
-
 
 # ╔═╡ 65194fa2-a30c-4423-b5c6-eab8507af235
 """"
@@ -245,14 +242,16 @@ end
 Initialize the 2d problem
 """
 function u⃗₀_2d(x,y)
-	u = u₀; v = v₀
+	u = u₀ 
+	v = v₀
+	uₑ = 0
 	if 0 ≤ x ≤ 3.5 && 0 ≤ y ≤ 70
 		u = 2
 	end
 	if 31 ≤ x ≤ 39 && 0 ≤ y ≤ 35
 		v = 2
 	end
-	uₑ = 0
+	
 	return [u, uₑ, v]
 end
 
@@ -262,7 +261,7 @@ end
 2D Boundaries
 """
 function bcondition_2d(f)
-	for species ∈ [1 3] # Species 2 as well??
+	for species ∈ [1 2] # Species 2 as well??
 		for region ∈ [1 2 3 4]
 			boundary_neumann!(f,species=species,region=region,value=0)
 			# TODO: Double-check these BCs
@@ -298,11 +297,14 @@ function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots)
 	U = unknowns(system)
 	inival = map(u⃗₀_2d, xgrid)
 	init .= [tuple[k] for tuple in inival, k in 1:3]'
-	Tinit_solve=40  # What does this represent?
-	for t ∈ 0:Δt:Tinit_solve
-		VoronoiFVM.solve!(U, init, system; tstep=Δt)
-		init .= U
-	end
+
+	# If we want to do the "initial @ 40" that the paper does:
+	# Tinit_solve=40  
+	Tinit_solve=0
+	# for t ∈ 0:Δt:Tinit_solve
+	# 	VoronoiFVM.solve!(U, init, system; tstep=Δt)
+	# 	init .= U
+	# end
 	
 	
 	SolArray = copy(init)
@@ -313,7 +315,7 @@ function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots)
 		init .= U
 		SolArray = cat(SolArray, copy(U), dims=3)
 	end
-	vis = GridVisualizer(resolution=(400,300), dim=1, Plotter=Plots)
+	vis = GridVisualizer(resolution=(400,300), dim=2, Plotter=Plots)
     return xgrid, tgrid, SolArray, vis, system
 end
 
@@ -325,15 +327,12 @@ begin
 end;
 
 # ╔═╡ 30f6a587-5ff9-4896-9291-2bdeeb0fdfb8
-function plot_species_3d_at_t(spec, t=0, Δt=1e-1, xgrid=xgrid, tgrid=tgrid, sol=sol)
-	tₛ = Int16(round(t/Δt))+1
-	Xgrid = xgrid[Coordinates][:]; Tgrid = tgrid; 
+function plot_species_3d(spec, t=0, Δt=1e-1, xgrid=xgrid, tgrid=tgrid, sol=sol)
+	Xgrid = xgrid[Coordinates][:]
 	Zgrid = sol[spec,:,:]
-	# Zgrid = sol[spec,:,tₛ]
-	xstep = 1; tstep = 1;
-	Tgrid = Tgrid[1:xstep:end]; 
-	Xgrid = Xgrid[1:tstep:end]
-	Zgrid = Zgrid[1:tstep:end,1:xstep:end]; 
+	Tgrid = tgrid[1:1:end]
+	Xgrid = Xgrid[1:1:end]
+	Zgrid = Zgrid[1:1:end,1:1:end]
 	PyPlot.clf()
 	PyPlot.suptitle("Space-Time plot for "*species[spec])
 	PyPlot.surf(Xgrid,Tgrid,Zgrid',cmap=:coolwarm) # 3D surface plot
@@ -367,7 +366,7 @@ function contour_plot(spec)
 	PyPlot.xlabel(L"x")
 	PyPlot.ylabel(L"t")
 	figure=PyPlot.gcf()
-	figure.set_size_inches(7,7)
+	figure.set_size_inches(5,5)
 	# PyPlot.savefig("../img/st_contour_plot_species_"*string(spec))
 	figure
 end
@@ -375,23 +374,26 @@ end
 # ╔═╡ c4cfe669-215a-47a3-b10f-40153e2aa3b1
 contour_plot(1)
 
+# ╔═╡ 2aacef0e-3350-4348-8b33-52e53480e61e
+contour_plot(2)
+
+# ╔═╡ 35727206-dde9-4b68-a164-26b1944be296
+contour_plot(3)
+
 # ╔═╡ e6ab7227-f1fe-4ef8-b693-8a8127b343af
-plot_species_3d_at_t(1)
+plot_species_3d(1)
 
 # ╔═╡ ee2ff454-38a4-44ab-af42-d519f708c65c
-plot_species_3d_at_t(2)
+plot_species_3d(2)
 
 # ╔═╡ 6bcd663d-0c0a-4c7d-b6b9-466214b71295
-plot_species_3d_at_t(3)
+plot_species_3d(3)
 
-
-# ╔═╡ 8e6b3aea-fef4-4913-bc8e-c37745dae401
-# plot_species_3d_at_t(2,3,Δt₂,xgrid₂,sol₂)
 
 # ╔═╡ fbb358fc-95b9-49f1-9737-d2f84c9d5a96
 function contour_2d_at_t(spec, t, Δt, xgrid, sol)
 	tₛ = Int16(round(t/Δt))+1
-	print(string("ts is", tₛ))
+	# print(string("ts is", tₛ))
 	p = scalarplot(
 		xgrid,sol[spec,:,tₛ], Plotter=PyPlot, colormap=:hot, 
 		title="2D problem with 1D problem setup for "*species[spec]*
@@ -400,32 +402,31 @@ function contour_2d_at_t(spec, t, Δt, xgrid, sol)
 	p.set_size_inches(7,7)
 	PyPlot.xlabel(L"x")
 	PyPlot.ylabel(L"y")
-	p
+	# p
+	figure=PyPlot.gcf()
+	figure.set_size_inches(5,5)
+	figure
 end
-
-# ╔═╡ 662dc745-94d3-4416-85da-49f380d98277
-contour_2d_at_t(2,0,Δt₂,xgrid₂,sol₂)
-
-# ╔═╡ 402015b0-0890-4e99-ab60-71f6e100ac50
-contour_2d_at_t(1,0,Δt₂,xgrid₂,sol₂)
-
-# ╔═╡ 4b7a7dbf-c199-49ae-8d41-95d101228b04
-# begin
-# 	anim2 = @animate for t in 0:Δt*10:tf
-# 		# contour_2d_at_t(2,t,Δt₂,xgrid₂,sol₂)
-# 		plot_species_3d_at_t(2,t,Δt₂,xgrid₂,sol₂)
-# 	end
-# 	gif(anim2)
-# end
 
 # ╔═╡ b1cb7a29-aa58-4016-93b6-383e7e4aff82
-begin
-	anim2 = @animate for t in 0:Δt*10:tf
-		contour_2d_at_t(2,t,Δt₂,xgrid₂,sol₂)
-		# plot_species_3d_at_t(2,t,Δt₂,xgrid₂,sol₂)
-	end
-	gif(anim2)
-end
+# # WHY IS THIS DISPLAYING THE SCALAR GRAPH? I'm going insane
+# begin
+# 	tf₂ = 10
+# 	anim3 = @animate for t in 0:Δt*10:tf₂
+# 		contour_2d_at_t(2,t,Δt₂,xgrid₂,sol₂)
+# 		# plot_species_3d_at_t(2,t,Δt₂,xgrid₂,sol₂)
+# 	end
+# 	gif(anim3, "../2D_contour.gif")
+# end
+
+# ╔═╡ 4cfec74c-46de-4281-a8c1-7b5a76ea851f
+@bind species_select PlutoUI.Select([1, 2, 3])
+
+# ╔═╡ 3f00ecee-2003-4c14-aaa5-d525f3b11607
+@bind time₂ PlutoUI.Slider(0:70,show_value=true)
+
+# ╔═╡ 9f834292-40d4-4e70-a31b-8bb37884176d
+contour_2d_at_t(species_select,time₂,Δt₂,xgrid₂,sol₂)
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1961,7 +1962,6 @@ version = "0.9.1+5"
 # ╠═28dcd70a-952d-492a-84f8-ee04eb83e360
 # ╠═6cb4c6ac-c8a4-412f-be49-87e00d3fd8b4
 # ╠═e7cc8d45-4816-4623-9d4e-0d84d78c8fd2
-# ╠═68b9bd52-fcf2-49ee-af0e-b41a27096c57
 # ╠═65194fa2-a30c-4423-b5c6-eab8507af235
 # ╠═6a2270d4-cb7c-41a1-a300-d87079666145
 # ╠═51d646e9-a066-4068-9598-b9673bdda8f8
@@ -1970,14 +1970,15 @@ version = "0.9.1+5"
 # ╠═30f6a587-5ff9-4896-9291-2bdeeb0fdfb8
 # ╠═f4b9b7a9-15d6-496d-87cd-ba86f151a4c7
 # ╠═c4cfe669-215a-47a3-b10f-40153e2aa3b1
+# ╠═2aacef0e-3350-4348-8b33-52e53480e61e
+# ╠═35727206-dde9-4b68-a164-26b1944be296
 # ╠═e6ab7227-f1fe-4ef8-b693-8a8127b343af
 # ╠═ee2ff454-38a4-44ab-af42-d519f708c65c
 # ╠═6bcd663d-0c0a-4c7d-b6b9-466214b71295
-# ╠═8e6b3aea-fef4-4913-bc8e-c37745dae401
 # ╠═fbb358fc-95b9-49f1-9737-d2f84c9d5a96
-# ╠═662dc745-94d3-4416-85da-49f380d98277
-# ╠═402015b0-0890-4e99-ab60-71f6e100ac50
-# ╠═4b7a7dbf-c199-49ae-8d41-95d101228b04
 # ╠═b1cb7a29-aa58-4016-93b6-383e7e4aff82
+# ╠═4cfec74c-46de-4281-a8c1-7b5a76ea851f
+# ╠═3f00ecee-2003-4c14-aaa5-d525f3b11607
+# ╠═9f834292-40d4-4e70-a31b-8bb37884176d
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
