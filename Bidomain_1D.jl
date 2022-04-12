@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.18.2
+# v0.17.2
 
 using Markdown
 using InteractiveUtils
@@ -16,9 +16,19 @@ end
 
 # ╔═╡ 2595b432-a4bc-4f64-856b-c44851122a14
 begin 
-    using PlutoUI, Plots, Roots ,PlutoUI,HypertextLiteral,
+    using PlutoUI, Plots, Roots , PyPlot, PlutoUI,HypertextLiteral,
 	ExtendableGrids,VoronoiFVM, PlutoVista,GridVisualize,LinearAlgebra
+	
+
+	# using ShortCodes,
+	# using LaTeXStrings, 
+	# using PyCall, DataFrames
+	
+	# GridVisualize.default_plotter!(Plots);
 	default_plotter!(PlutoVista);
+	
+	pyplot();
+	TableOfContents();
 end;
 
 # ╔═╡ 62b11f3a-7d3d-4790-bacf-df10f297888d
@@ -86,9 +96,9 @@ end
 
 # ╔═╡ b484a050-2e8a-4a0f-b975-62692be5cea9
 function flux(f,u,edge)
-	f[1]=-σᵢ*((u[1,2]-u[1,1])+(u[2,2]-u[2,1]))
-	f[2]=σᵢ*(u[1,2]-u[1,1])+(σᵢ+σₑ)*(u[2,2]-u[2,1])
-	f[3]=0
+	f[1] = -σᵢ*((u[1,2] - u[1,1]) + (u[2,2] - u[2,1]))
+	f[2] = σᵢ*(u[1,2] - u[1,1]) + (σᵢ+σₑ) * (u[2,2] - u[2,1])
+	f[3] = 0
 end
 
 # ╔═╡ 7528709e-39f3-462a-8845-5ee2c78dec7e
@@ -104,7 +114,7 @@ md"""
 """
 
 # ╔═╡ 64a70e08-dea2-40bc-8db9-cc3ced84ac2f
-function bcondition(f)
+function bcondition_1d(f)
 	boundary_neumann!(f,species=1,region=1,value=0)
 	boundary_neumann!(f,species=1,region=2,value=0)
 
@@ -115,14 +125,14 @@ function bcondition(f)
 end
 
 # ╔═╡ 089b0d84-3c9f-499f-8e41-9e6e71b74036
-function grid_1D(N)
+function grid_1d(N)
 	X = LinRange(0,L,N)
 	return grid=simplexgrid(X)
 end
 
 # ╔═╡ b38b57f6-ad80-4a50-b8bd-952d4d3e4866
 function bidomain_1D(;N=100, Δt=1e-1, T=30, Plotter=Plots)
-	grid = grid_1D(N)
+	grid = grid_1d(N)
     
 	#system Def
 	
@@ -134,7 +144,7 @@ function bidomain_1D(;N=100, Δt=1e-1, T=30, Plotter=Plots)
 	
 	enable_species!(system, species=[1,2,3])
 	
-	bcondition(system)
+	bcondition_1d(system)
 	
 	system
 
@@ -159,29 +169,210 @@ end
 
 # ╔═╡ 6e2fab73-30a8-4209-ba55-529f9c77cbc3
 begin 
-	N = 500; Δt = 1e-1;
+	N = 500; 
+	Δt = 1e-1;
+	species = ["u", "u_e", "v"]
 	grid, tgrid, sol, vis, system= bidomain_1D(N=N, Δt=Δt);
 	system
 end
 
-# ╔═╡ e087e718-5cfc-4c8d-aa33-3a1f54bd5762
-@bind time PlutoUI.Slider(0:30,show_value=true)
-
-# ╔═╡ 89bc3729-2ffa-447b-bcea-6d1594e7a8f9
-begin
+# ╔═╡ 28dcd70a-952d-492a-84f8-ee04eb83e360
+function plot_at_t(t,vis,xgrid,sol)
 	species = ["u", "u_e", "v"]
-    tₛ = Int16(round(time/Δt))+1
-    scalarplot!(vis, grid, sol[1,:,tₛ], linestyle=:solid)
-    scalarplot!(vis, grid, sol[2,:,tₛ], linestyle=:dash)
-    plotted_sol = scalarplot!(vis, grid, sol[3,:,tₛ], linestyle=:dot, legend=:best, 
-    show=true, title=" Bidomain Sol at time = $(time) ")
-    for (i,spec) ∈ zip(2 .* (1:length(species)), species)
-     	plotted_sol[1][i][:label] = spec
-    end
+	tₛ = Int16(round(t/Δt))+1
+	scalarplot!(vis, xgrid, sol[1,:,tₛ], linestyle=:solid)
+	scalarplot!(vis, xgrid, sol[2,:,tₛ], linestyle=:dash)
+	plotted_sol = scalarplot!(
+		vis, xgrid, sol[3,:,tₛ], linestyle=:dot, legend=:best, show=true)
+	for (i,spec) ∈ zip(2 .* (1:length(species)), species)
+		plotted_sol[1][i][:label] = spec
+	end
 	Plots.plot!(labels=species)
 	Plots.plot!(ylims=(-2.5,2.5))
 	plotted_sol
 end
+
+# ╔═╡ e7cc8d45-4816-4623-9d4e-0d84d78c8fd2
+begin
+	tf = 15
+	step_size =3*Δt
+	anim = @animate for t in 0:step_size:tf
+		plot_at_t(t,vis,xgrid,sol)
+	end
+	gif(anim, "../1D_scalar.gif")
+end
+
+# ╔═╡ 65194fa2-a30c-4423-b5c6-eab8507af235
+""""
+	Create the 2d Grid
+"""
+function grid_2d(N)
+	X = LinRange(0,L,N[1])
+	Y = LinRange(0,L,N[2])
+	grid2d = simplexgrid(X,Y)
+	return grid2d
+end
+
+# ╔═╡ 6a2270d4-cb7c-41a1-a300-d87079666145
+"""
+Initialize the 2d problem
+"""
+function u⃗₀_2d(x,y)
+	u = u₀ 
+	v = v₀
+	uₑ = 0
+	if 0 ≤ x ≤ 3.5 && 0 ≤ y ≤ 70
+		u = 2
+	end
+	if 31 ≤ x ≤ 39 && 0 ≤ y ≤ 35
+		v = 2
+	end
+	return [u, uₑ, v]
+end
+
+
+# ╔═╡ 51d646e9-a066-4068-9598-b9673bdda8f8
+"""
+2D Boundaries
+"""
+function bcondition_2d(f)
+	for species ∈ [1 2] # Species 2 as well??
+		for region ∈ [1 2 3 4]
+			boundary_neumann!(f,species=species,region=region,value=0)
+		end
+	end
+end
+
+# ╔═╡ cbcbcfac-9e76-4a44-b2a9-40c4e8d089d6
+function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots)
+	xgrid = grid_2d(N)
+    
+	#system Def
+	
+	physics = VoronoiFVM.Physics(
+		storage=storage, flux=flux, reaction=reaction, breaction=breaction)
+	
+	system=VoronoiFVM.System(
+		xgrid, physics, unknown_storage=:sparse) 
+	
+	enable_species!(system, species=[1,2,3])
+	
+	bcondition_2d(system)
+	# system
+
+	# Initial conditions:
+	# inival = map(u_init, grid)
+	# init .= [tuple[k] for tuple in inival, k in 1:3]'
+	# U = unknowns(system)
+
+	# copied
+	init = unknowns(system)
+	U = unknowns(system)
+	inival = map(u⃗₀_2d, xgrid)
+	init .= [tuple[k] for tuple in inival, k in 1:3]'
+
+	# If we want to do the "initial @ 40" that the paper does:
+	Tinit_solve=0
+	# Tinit_solve=40  
+	# for t ∈ 0:Δt:Tinit_solve
+	# 	VoronoiFVM.solve!(U, init, system; tstep=Δt)
+	# 	init .= U
+	# end
+	
+	
+	SolArray = copy(init)
+	# tgrid = 0:Δt:T
+	tgrid = (Tinit_solve:Δt:T+Tinit_solve)
+	for t ∈ tgrid[2:end]
+		VoronoiFVM.solve!(U, init, system; tstep=Δt)
+		init .= U
+		SolArray = cat(SolArray, copy(U), dims=3)
+	end
+	vis = GridVisualizer(resolution=(400,300), dim=2, Plotter=Plots)
+    return xgrid, tgrid, SolArray, vis, system
+end
+
+# ╔═╡ ceebe18c-2e85-4e5a-bcad-437bc60453b7
+begin
+	N₂ = (100,25); Δt₂ = 1e-1;
+	T= 70
+	xgrid₂, tgrid₂, sol₂, vis₂, sys₂ = bidomain_2d(N=N₂,T=T, Δt=Δt₂, Plotter=PyPlot);
+end;
+
+# ╔═╡ 30f6a587-5ff9-4896-9291-2bdeeb0fdfb8
+function plot_species_3d(spec, angle=240, t=0, Δt=1e-1, xgrid=xgrid, tgrid=tgrid, sol=sol, )
+	Xgrid = xgrid[Coordinates][:]
+	Zgrid = sol[spec,:,:]
+	Tgrid = tgrid[1:1:end]
+	Xgrid = Xgrid[1:1:end]
+	Zgrid = Zgrid[1:1:end,1:1:end]
+	PyPlot.clf()
+	PyPlot.suptitle("Space-Time plot for "*species[spec])
+	PyPlot.surf(Xgrid,Tgrid,Zgrid',cmap=:coolwarm) # 3D surface plot
+	ax=PyPlot.gca(projection="3d")  # Obtain 3D plot axes
+	y_angle = 30
+	ax.view_init(y_angle,angle)
+
+	PyPlot.xlabel(L"X")
+	PyPlot.ylabel(L"T")
+	PyPlot.zlabel(L"u")
+	figure=PyPlot.gcf()
+	figure.set_size_inches(7,7)
+	figure
+end
+
+# ╔═╡ f4b9b7a9-15d6-496d-87cd-ba86f151a4c7
+function contour_plot(spec)
+	PyPlot.clf()
+	Xgrid = xgrid[Coordinates][:]
+	Tgrid = tgrid
+	Zgrid = sol[spec,:,:]
+	PyPlot.suptitle("Space-time contour plot of "*species[spec])
+	
+	PyPlot.contourf(Xgrid,Tgrid,Zgrid',cmap="viridis",levels=100)
+	axes=PyPlot.gca()
+	axes.set_aspect(2)
+	PyPlot.colorbar()
+
+	PyPlot.xlabel(L"x")
+	PyPlot.ylabel(L"t")
+	figure=PyPlot.gcf()
+	figure.set_size_inches(5,5)
+	figure
+end
+
+# ╔═╡ c4cfe669-215a-47a3-b10f-40153e2aa3b1
+contour_plot(1)
+
+# ╔═╡ 2aacef0e-3350-4348-8b33-52e53480e61e
+contour_plot(2)
+
+# ╔═╡ 35727206-dde9-4b68-a164-26b1944be296
+contour_plot(3)
+
+# ╔═╡ fbb358fc-95b9-49f1-9737-d2f84c9d5a96
+function contour_2d_at_t(spec, t, Δt, xgrid, sol)
+	tₛ = Int16(round(t/Δt))+1
+	# print(string("ts is", tₛ))
+	p = scalarplot(
+		xgrid,sol[spec,:,tₛ], Plotter=PyPlot, colormap=:viridis, 
+		title="2D problem with 1D problem setup for "*species[spec]*
+		" at t="*string(t))
+	PyPlot.xlabel(L"x")
+	PyPlot.ylabel(L"y")
+	figure=PyPlot.gcf()
+	figure.set_size_inches(5,5)
+	figure
+end
+
+# ╔═╡ 4cfec74c-46de-4281-a8c1-7b5a76ea851f
+@bind species_select PlutoUI.Select([1, 2, 3])
+
+# ╔═╡ 3f00ecee-2003-4c14-aaa5-d525f3b11607
+@bind time₂ PlutoUI.Slider(0:70,show_value=true)
+
+# ╔═╡ 9f834292-40d4-4e70-a31b-8bb37884176d
+contour_2d_at_t(species_select,time₂,Δt₂,xgrid₂,sol₂)
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -193,6 +384,7 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 PlutoVista = "646e1f28-b900-46d7-9d87-d554eb38a413"
+PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
 VoronoiFVM = "82b139dc-5afc-11e9-35da-9b9bdfd336f3"
 
@@ -203,6 +395,7 @@ HypertextLiteral = "~0.9.3"
 Plots = "~1.27.0"
 PlutoUI = "~0.7.37"
 PlutoVista = "~0.8.12"
+PyPlot = "~2.10.0"
 Roots = "~1.3.14"
 VoronoiFVM = "~0.16.2"
 """
@@ -358,6 +551,12 @@ version = "0.1.2"
 git-tree-sha1 = "455419f7e328a1a2493cabc6428d79e951349769"
 uuid = "a33af91c-f02d-484b-be07-31d278c5ca2b"
 version = "0.1.1"
+
+[[Conda]]
+deps = ["Downloads", "JSON", "VersionParsing"]
+git-tree-sha1 = "6e47d11ea2776bc5627421d59cdcc1296c058071"
+uuid = "8f4d0f93-b110-5947-807f-2305c1781a2d"
+version = "1.7.0"
 
 [[ConstructionBase]]
 deps = ["LinearAlgebra"]
@@ -845,7 +1044,7 @@ uuid = "38a345b3-de98-5d2b-a5d3-14cd9215e700"
 version = "2.36.0+0"
 
 [[LinearAlgebra]]
-deps = ["Libdl", "libblastrampoline_jll"]
+deps = ["Libdl"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [[LogExpFunctions]]
@@ -936,10 +1135,6 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "887579a3eb005446d514ab7aeac5d1d027658b8f"
 uuid = "e7412a2a-1a6e-54c0-be00-318e2571c051"
 version = "1.3.5+1"
-
-[[OpenBLAS_jll]]
-deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
-uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
 
 [[OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -1048,6 +1243,18 @@ version = "1.2.5"
 deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
+[[PyCall]]
+deps = ["Conda", "Dates", "Libdl", "LinearAlgebra", "MacroTools", "Serialization", "VersionParsing"]
+git-tree-sha1 = "1fc929f47d7c151c839c5fc1375929766fb8edcc"
+uuid = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
+version = "1.93.1"
+
+[[PyPlot]]
+deps = ["Colors", "LaTeXStrings", "PyCall", "Sockets", "Test", "VersionParsing"]
+git-tree-sha1 = "14c1b795b9d764e1784713941e787e1384268103"
+uuid = "d330b81b-6aea-500a-939a-2ce795aea3ee"
+version = "2.10.0"
+
 [[Qt5Base_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Fontconfig_jll", "Glib_jll", "JLLWrappers", "Libdl", "Libglvnd_jll", "OpenSSL_jll", "Pkg", "Xorg_libXext_jll", "Xorg_libxcb_jll", "Xorg_xcb_util_image_jll", "Xorg_xcb_util_keysyms_jll", "Xorg_xcb_util_renderutil_jll", "Xorg_xcb_util_wm_jll", "Zlib_jll", "xkbcommon_jll"]
 git-tree-sha1 = "ad368663a5e20dbb8d6dc2fddeefe4dae0781ae8"
@@ -1065,7 +1272,7 @@ deps = ["InteractiveUtils", "Markdown", "Sockets", "Unicode"]
 uuid = "3fa0cd96-eef1-5676-8a61-b3b8758bbffb"
 
 [[Random]]
-deps = ["SHA", "Serialization"]
+deps = ["Serialization"]
 uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [[RecipesBase]]
@@ -1346,6 +1553,11 @@ git-tree-sha1 = "34db80951901073501137bdbc3d5a8e7bbd06670"
 uuid = "41fe7b60-77ed-43a1-b4f0-825fd5a5650d"
 version = "0.1.2"
 
+[[VersionParsing]]
+git-tree-sha1 = "58d6e80b4ee071f5efd07fda82cb9fbe17200868"
+uuid = "81def892-9a0e-5fdd-b105-ffc91e053289"
+version = "1.3.0"
+
 [[VertexSafeGraphs]]
 deps = ["Graphs"]
 git-tree-sha1 = "8351f8d73d7e880bfc042a8b6922684ebeafb35c"
@@ -1530,10 +1742,6 @@ git-tree-sha1 = "5982a94fcba20f02f42ace44b9894ee2b140fe47"
 uuid = "0ac62f75-1d6f-5e53-bd7c-93b484bb37c0"
 version = "0.15.1+0"
 
-[[libblastrampoline_jll]]
-deps = ["Artifacts", "Libdl", "OpenBLAS_jll"]
-uuid = "8e850b90-86db-534c-a0d3-1478176c7d93"
-
 [[libfdk_aac_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "daacc84a041563f965be61859a36e17c4e4fcd55"
@@ -1597,7 +1805,21 @@ version = "0.9.1+5"
 # ╠═089b0d84-3c9f-499f-8e41-9e6e71b74036
 # ╠═b38b57f6-ad80-4a50-b8bd-952d4d3e4866
 # ╠═6e2fab73-30a8-4209-ba55-529f9c77cbc3
-# ╠═e087e718-5cfc-4c8d-aa33-3a1f54bd5762
-# ╠═89bc3729-2ffa-447b-bcea-6d1594e7a8f9
+# ╠═28dcd70a-952d-492a-84f8-ee04eb83e360
+# ╠═e7cc8d45-4816-4623-9d4e-0d84d78c8fd2
+# ╠═65194fa2-a30c-4423-b5c6-eab8507af235
+# ╠═6a2270d4-cb7c-41a1-a300-d87079666145
+# ╠═51d646e9-a066-4068-9598-b9673bdda8f8
+# ╠═cbcbcfac-9e76-4a44-b2a9-40c4e8d089d6
+# ╠═ceebe18c-2e85-4e5a-bcad-437bc60453b7
+# ╠═30f6a587-5ff9-4896-9291-2bdeeb0fdfb8
+# ╠═f4b9b7a9-15d6-496d-87cd-ba86f151a4c7
+# ╠═c4cfe669-215a-47a3-b10f-40153e2aa3b1
+# ╠═2aacef0e-3350-4348-8b33-52e53480e61e
+# ╠═35727206-dde9-4b68-a164-26b1944be296
+# ╠═fbb358fc-95b9-49f1-9737-d2f84c9d5a96
+# ╠═4cfec74c-46de-4281-a8c1-7b5a76ea851f
+# ╠═3f00ecee-2003-4c14-aaa5-d525f3b11607
+# ╠═9f834292-40d4-4e70-a31b-8bb37884176d
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
