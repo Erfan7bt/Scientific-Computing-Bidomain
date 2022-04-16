@@ -17,7 +17,7 @@ end
 # ╔═╡ 2595b432-a4bc-4f64-856b-c44851122a14
 begin 
     using PlutoUI, Plots, Roots , PyPlot, PlutoUI,HypertextLiteral,
-	ExtendableGrids,VoronoiFVM, PlutoVista,GridVisualize,LinearAlgebra
+	ExtendableGrids,VoronoiFVM, PlutoVista,GridVisualize,LinearAlgebra, JLD2
 	# using DifferentialEquations
 	
 	default_plotter!(PlutoVista)
@@ -25,9 +25,6 @@ begin
 	pyplot()
 	TableOfContents() # TODO: use
 end;
-
-# ╔═╡ f8e44795-de76-46fd-be1b-eeb74f91f59d
-using JLD2
 
 # ╔═╡ 62b11f3a-7d3d-4790-bacf-df10f297888d
 md"""
@@ -44,12 +41,15 @@ begin
 	σᵢ_anisotropic = 25*[0.263 0; 0 0.0263]
 	σₑ_anisotropic = 25*[0.263 0; 0 0.1087]
 	
-	σᵢ = 1#σᵢ_anisotropic
-	σₑ = 1#σₑ_anisotropic
+	σᵢ = 1
+	σₑ = 1
 	# L = 70
 	L = 70
 	tf = 70
-	# tf = 30
+
+	# Storage and replay
+	overwrite_storage = false
+	compression = 100
 end;
 
 # ╔═╡ fb6aa962-a7d6-479b-bf11-52b8be2483f8
@@ -64,11 +64,12 @@ end
 # ╔═╡ df3a31b9-2a70-44d5-8a7e-5d427dc327cc
 # 2D Parameters
 begin
-	# N₂ = (100,25)
-	# N₂ = (50,50)
-	# Δt₂ = 5e-2
-	N₂ = (120,120)
-	Δt₂ = 1e-2
+	N₂ = (100,25)
+	Δt₂ = 1e-1
+	
+	# longer params:
+	# N₂ = (120,120)
+	# Δt₂ = 1e-2
 end
 
 # ╔═╡ 6dcd9399-8bd2-48a6-8e06-5af201d4f730
@@ -227,6 +228,32 @@ begin
 	gif(anim, "../1D_scalar.gif")
 end
 
+# ╔═╡ 03fa9a1b-2e6a-4189-8f1b-8a702c9dcbf0
+function contour_plot(spec)
+	PyPlot.clf()
+	Xgrid = xgrid[Coordinates][:]
+	Tgrid = tgrid
+	Zgrid = sol[spec,:,:]
+	PyPlot.suptitle("Space-time contour plot of "*species[spec])
+	
+	PyPlot.contourf(Xgrid,Tgrid,Zgrid',cmap="viridis",levels=100)
+	axes=PyPlot.gca()
+	axes.set_aspect(2)
+	PyPlot.colorbar()
+
+	PyPlot.xlabel(L"x")
+	PyPlot.ylabel(L"t")
+	figure=PyPlot.gcf()
+	figure.set_size_inches(5,5)
+	figure
+end
+
+# ╔═╡ df344c5f-06e6-41cf-adf8-63a184445388
+@bind species_1d PlutoUI.Select([1, 2, 3])
+
+# ╔═╡ 4828996d-6084-4279-b4d9-aa52254682c2
+contour_plot(species_1d)
+
 # ╔═╡ 65194fa2-a30c-4423-b5c6-eab8507af235
 """"
 	Create the 2d Grid
@@ -338,61 +365,19 @@ function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots)
     return xgrid, tgrid, SolArray, vis, system
 end
 
+# ╔═╡ 49c346dc-1a3f-4c3e-ab28-68f00c2b7ca1
+@bind species_replay PlutoUI.Select([1, 2, 3])
+
+# ╔═╡ fe52e576-d533-4a79-9707-ee867ea9df1c
+@bind time_replay PlutoUI.Slider(0:tf,show_value=true)
+
 # ╔═╡ ceebe18c-2e85-4e5a-bcad-437bc60453b7
 begin
-	xgrid₂, tgrid₂, sol₂, vis₂, sys₂ = bidomain_2d(N=N₂,T=tf, Δt=Δt₂, Plotter=PyPlot);
-end;
+	if overwrite_storage
+		xgrid₂, tgrid₂, sol₂, vis₂, sys₂ = bidomain_2d(N=N₂,T=tf, Δt=Δt₂, Plotter=PyPlot);
 
-# ╔═╡ 30f6a587-5ff9-4896-9291-2bdeeb0fdfb8
-function plot_species_3d(spec, angle=240, t=0, Δt=1e-1, xgrid=xgrid, tgrid=tgrid, sol=sol, )
-	Xgrid = xgrid[Coordinates][:]
-	Zgrid = sol[spec,:,:]
-	Tgrid = tgrid[1:1:end]
-	Xgrid = Xgrid[1:1:end]
-	Zgrid = Zgrid[1:1:end,1:1:end]
-	PyPlot.clf()
-	PyPlot.suptitle("Space-Time plot for "*species[spec])
-	PyPlot.surf(Xgrid,Tgrid,Zgrid',cmap=:coolwarm) # 3D surface plot
-	ax=PyPlot.gca(projection="3d")  # Obtain 3D plot axes
-	y_angle = 30
-	ax.view_init(y_angle,angle)
-
-	PyPlot.xlabel(L"X")
-	PyPlot.ylabel(L"T")
-	PyPlot.zlabel(L"u")
-	figure=PyPlot.gcf()
-	figure.set_size_inches(7,7)
-	figure
+	end
 end
-
-# ╔═╡ f4b9b7a9-15d6-496d-87cd-ba86f151a4c7
-function contour_plot(spec)
-	PyPlot.clf()
-	Xgrid = xgrid[Coordinates][:]
-	Tgrid = tgrid
-	Zgrid = sol[spec,:,:]
-	PyPlot.suptitle("Space-time contour plot of "*species[spec])
-	
-	PyPlot.contourf(Xgrid,Tgrid,Zgrid',cmap="viridis",levels=100)
-	axes=PyPlot.gca()
-	axes.set_aspect(2)
-	PyPlot.colorbar()
-
-	PyPlot.xlabel(L"x")
-	PyPlot.ylabel(L"t")
-	figure=PyPlot.gcf()
-	figure.set_size_inches(5,5)
-	figure
-end
-
-# ╔═╡ c4cfe669-215a-47a3-b10f-40153e2aa3b1
-contour_plot(1)
-
-# ╔═╡ 2aacef0e-3350-4348-8b33-52e53480e61e
-contour_plot(2)
-
-# ╔═╡ 35727206-dde9-4b68-a164-26b1944be296
-contour_plot(3)
 
 # ╔═╡ fbb358fc-95b9-49f1-9737-d2f84c9d5a96
 function contour_2d_at_t(spec, t, Δt, xgrid, sol)
@@ -403,12 +388,19 @@ function contour_2d_at_t(spec, t, Δt, xgrid, sol)
 		" at t="*string(t))
 	PyPlot.xlabel(L"x")
 	PyPlot.ylabel(L"y")
-	# PyPlot.imshow(X)
-	# PyPlot.clim(-3,3) 
 	figure=PyPlot.gcf()
 	figure.set_size_inches(5,5)
 	figure
 end
+
+# ╔═╡ 7695a4ff-15d1-4978-8c84-f22bc8cb9ccc
+contour_2d_at_t(
+	species_replay,
+	time_replay,
+	Δt₂ * compression / 10, # This was run at 1/10 the timestep so dividing by another factor of 10
+	load_object("xgrid.jld2"),
+	load_object("sol.jld2")
+)
 
 # ╔═╡ 4cfec74c-46de-4281-a8c1-7b5a76ea851f
 @bind species_select PlutoUI.Select([1, 2, 3])
@@ -419,49 +411,28 @@ end
 # ╔═╡ 9f834292-40d4-4e70-a31b-8bb37884176d
 contour_2d_at_t(species_select,time₂,Δt₂,xgrid₂,sol₂)
 
-# ╔═╡ 5f3e1d6f-fdfa-40bd-8fd8-e7449a09500b
-begin
-	tₛ = Int16(round(50/Δt₂))+1
-	size(sol₂[:, : , 4999])
-	size(sol₂)
-end
-
 # ╔═╡ b0105a2a-41f2-4143-8f23-279333d7a31e
-begin
-	tgrid3 = (70:Δt₂:90)
-	# tₛ2 = Int16(round(t/Δt₂))+1
-	# init = sol₂[:, : , 5001]
-	U = sol₂[:, : , 5001]
-	sol3 = copy(sol₂)
-	for t ∈ tgrid3[1:end]
-		if t % 1 == 0
-			println(string("At t=", t))
-			# contour_2d_at_t(species_select,t,Δt₂,xgrid,SolArray)
-		end
-		VoronoiFVM.solve!(U, U, sys₂; tstep=Δt₂)
-		init .= U
-		sol3 = cat(sol3, copy(U), dims=3)
-	end
-    # return xgrid, tgrid, SolArray, vis, sys₂
-end
 # begin
-# 	p = scalarplot(
-# 	xgrid₂,U2[1 , :], Plotter=PyPlot, colormap=:viridis, 
-# 	title="2D problem with 1D problem setup for "*species[1]*
-# 		" at t="*string(70))
-# 	PyPlot.xlabel(L"x")
-# 	PyPlot.ylabel(L"y")
-# 	# PyPlot.imshow(X)
-# 	# PyPlot.clim(-3,3) 
-# 	figure=PyPlot.gcf()
-# 	figure.set_size_inches(5,5)
-# 	figure
+# 	tgrid3 = (70:Δt₂:90)
+# 	# tₛ2 = Int16(round(t/Δt₂))+1
+# 	# init = sol₂[:, : , 5001]
+# 	U = sol₂[:, : , 7001]
+# 	sol3 = copy(sol₂)
+# 	for t ∈ tgrid3[1:end]
+# 		if t % 1 == 0
+# 			println(string("At t=", t))
+# 			# contour_2d_at_t(species_select,t,Δt₂,xgrid,SolArray)
+# 		end
+# 		VoronoiFVM.solve!(U, U, sys₂; tstep=Δt₂)
+# 		init .= U
+# 		sol3 = cat(sol3, copy(U), dims=3)
+# 	end
+#     # return xgrid, tgrid, SolArray, vis, sys₂
 # end
 
 # ╔═╡ f22b494e-f0f9-4058-88f6-29aeac95b2f4
 # Compress (only store every 100 timepts) and save the full solution for graphing
 begin
-	compression = 100
 	if overwrite_storage # Only store the solution if we really want to overwrite
 		sol_compressed = cat(sol₂[:, :, 1], sol₂[:, :, compression], dims=3)
 		for i ∈  2:70
@@ -471,21 +442,6 @@ begin
 		save_object("xgrid.jld2", xgrid₂)
 	end
 end
-
-# ╔═╡ 4870ea61-60d6-4274-ab64-567d1105447e
-@bind species_replay PlutoUI.Select([1, 2, 3])
-
-# ╔═╡ 9df4fd20-b57e-4f98-a739-0469bb4990db
-@bind time_replay PlutoUI.Slider(0:tf,show_value=true)
-
-# ╔═╡ 5db50468-0098-47e7-a767-902f846cf9c0
-contour_2d_at_t(
-	species_replay,
-	time_replay,
-	Δt₂ * compression,
-	load_object("xgrid.jld2"),
-	load_object("sol.jld2")
-)
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -503,16 +459,16 @@ Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
 VoronoiFVM = "82b139dc-5afc-11e9-35da-9b9bdfd336f3"
 
 [compat]
-ExtendableGrids = "~0.9.1"
+ExtendableGrids = "~0.9.5"
 GridVisualize = "~0.5.1"
 HypertextLiteral = "~0.9.3"
 JLD2 = "~0.4.22"
-Plots = "~1.27.0"
-PlutoUI = "~0.7.37"
-PlutoVista = "~0.8.12"
+Plots = "~1.27.5"
+PlutoUI = "~0.7.38"
+PlutoVista = "~0.8.13"
 PyPlot = "~2.10.0"
-Roots = "~1.3.14"
-VoronoiFVM = "~0.16.2"
+Roots = "~2.0.0"
+VoronoiFVM = "~0.16.3"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -606,6 +562,12 @@ deps = ["ChainRulesCore", "LinearAlgebra", "Test"]
 git-tree-sha1 = "bf98fa45a0a4cee295de98d4c1462be26345b9a1"
 uuid = "9e997f8a-9a97-42d5-a9f1-ce6bfc15e2c0"
 version = "0.1.2"
+
+[[CodecZlib]]
+deps = ["TranscodingStreams", "Zlib_jll"]
+git-tree-sha1 = "ded953804d019afa9a3f98981d99b33e3db7b6da"
+uuid = "944b1d66-785c-5afd-91f1-9de20f533193"
+version = "0.7.0"
 
 [[ColorSchemes]]
 deps = ["ColorTypes", "Colors", "FixedPointNumbers", "Random"]
@@ -788,10 +750,10 @@ uuid = "e2ba6199-217a-4e67-a87a-7c52f15ade04"
 version = "0.1.8"
 
 [[ExtendableGrids]]
-deps = ["AbstractTrees", "Dates", "DocStringExtensions", "ElasticArrays", "InteractiveUtils", "LinearAlgebra", "Printf", "Random", "SparseArrays", "StaticArrays", "Test"]
-git-tree-sha1 = "b8abd7c10625b1936f53e8e407c2060a489cc96e"
+deps = ["AbstractTrees", "Dates", "DocStringExtensions", "ElasticArrays", "InteractiveUtils", "LinearAlgebra", "Printf", "Random", "SparseArrays", "StaticArrays", "Test", "WriteVTK"]
+git-tree-sha1 = "cec19e62fc126df338de88585f45a763f7601bd3"
 uuid = "cfc395e8-590f-11e8-1f13-43a2532b2fa8"
-version = "0.9.1"
+version = "0.9.5"
 
 [[ExtendableSparse]]
 deps = ["DocStringExtensions", "LinearAlgebra", "Printf", "Requires", "SparseArrays", "SuiteSparse", "Test"]
@@ -1140,6 +1102,12 @@ git-tree-sha1 = "7f3efec06033682db852f8b3bc3c1d2b0a0ab066"
 uuid = "38a345b3-de98-5d2b-a5d3-14cd9215e700"
 version = "2.36.0+0"
 
+[[LightXML]]
+deps = ["Libdl", "XML2_jll"]
+git-tree-sha1 = "e129d9391168c677cd4800f5c0abb1ed8cb3794f"
+uuid = "9c8b4983-aa76-5018-a973-4c85ecc9e179"
+version = "0.9.0"
+
 [[LinearAlgebra]]
 deps = ["Libdl"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -1301,10 +1269,10 @@ uuid = "eebad327-c553-4316-9ea0-9fa01ccd7688"
 version = "0.1.1"
 
 [[PlotThemes]]
-deps = ["PlotUtils", "Requires", "Statistics"]
-git-tree-sha1 = "a3a964ce9dc7898193536002a6dd892b1b5a6f1d"
+deps = ["PlotUtils", "Statistics"]
+git-tree-sha1 = "8162b2f8547bc23876edd0c5181b27702ae58dce"
 uuid = "ccf2f8ad-2431-5c83-bf29-c5338b663b6a"
-version = "2.0.1"
+version = "3.0.0"
 
 [[PlotUtils]]
 deps = ["ColorSchemes", "Colors", "Dates", "Printf", "Random", "Reexport", "Statistics"]
@@ -1314,21 +1282,21 @@ version = "1.2.0"
 
 [[Plots]]
 deps = ["Base64", "Contour", "Dates", "Downloads", "FFMPEG", "FixedPointNumbers", "GR", "GeometryBasics", "JSON", "Latexify", "LinearAlgebra", "Measures", "NaNMath", "Pkg", "PlotThemes", "PlotUtils", "Printf", "REPL", "Random", "RecipesBase", "RecipesPipeline", "Reexport", "Requires", "Scratch", "Showoff", "SparseArrays", "Statistics", "StatsBase", "UUIDs", "UnicodeFun", "Unzip"]
-git-tree-sha1 = "9213b4c18b57b7020ee20f33a4ba49eb7bef85e0"
+git-tree-sha1 = "88ee01b02fba3c771ac4dce0dfc4ecf0cb6fb772"
 uuid = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
-version = "1.27.0"
+version = "1.27.5"
 
 [[PlutoUI]]
 deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
-git-tree-sha1 = "bf0a1121af131d9974241ba53f601211e9303a9e"
+git-tree-sha1 = "670e559e5c8e191ded66fa9ea89c97f10376bb4c"
 uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
-version = "0.7.37"
+version = "0.7.38"
 
 [[PlutoVista]]
 deps = ["ColorSchemes", "Colors", "DocStringExtensions", "GridVisualize", "HypertextLiteral", "UUIDs"]
-git-tree-sha1 = "2435d1d3e02db324414f268f30999b5c06a0d10f"
+git-tree-sha1 = "118d1871e3511131bae2196e238d0054bd9a62b0"
 uuid = "646e1f28-b900-46d7-9d87-d554eb38a413"
-version = "0.8.12"
+version = "0.8.13"
 
 [[Preferences]]
 deps = ["TOML"]
@@ -1426,9 +1394,9 @@ version = "0.3.0+0"
 
 [[Roots]]
 deps = ["CommonSolve", "Printf", "Setfield"]
-git-tree-sha1 = "0abe7fc220977da88ad86d339335a4517944fea2"
+git-tree-sha1 = "e382260f6482c27b5062eba923e36fde2f5ab0b9"
 uuid = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
-version = "1.3.14"
+version = "2.0.0"
 
 [[RuntimeGeneratedFunctions]]
 deps = ["ExprTools", "SHA", "Serialization"]
@@ -1663,9 +1631,9 @@ version = "0.2.0"
 
 [[VoronoiFVM]]
 deps = ["DiffResults", "DocStringExtensions", "ExtendableGrids", "ExtendableSparse", "ForwardDiff", "GridVisualize", "IterativeSolvers", "JLD2", "LinearAlgebra", "Parameters", "Printf", "RecursiveArrayTools", "Requires", "SparseArrays", "SparseDiffTools", "StaticArrays", "Statistics", "SuiteSparse", "Symbolics", "Test"]
-git-tree-sha1 = "527d3bbded231e626639029d9e6492b2991bd3a0"
+git-tree-sha1 = "254b5472a9f3ec970a08b24b76cba4bf1d79f3e6"
 uuid = "82b139dc-5afc-11e9-35da-9b9bdfd336f3"
-version = "0.16.2"
+version = "0.16.3"
 
 [[Wayland_jll]]
 deps = ["Artifacts", "Expat_jll", "JLLWrappers", "Libdl", "Libffi_jll", "Pkg", "XML2_jll"]
@@ -1678,6 +1646,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "4528479aa01ee1b3b4cd0e6faef0e04cf16466da"
 uuid = "2381bf8a-dfd0-557d-9999-79630e7b1b91"
 version = "1.25.0+0"
+
+[[WriteVTK]]
+deps = ["Base64", "CodecZlib", "FillArrays", "LightXML", "TranscodingStreams"]
+git-tree-sha1 = "bff2f6b5ff1e60d89ae2deba51500ce80014f8f6"
+uuid = "64499a7a-5c06-52f2-abe2-ccb03c286192"
+version = "1.14.2"
 
 [[XML2_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Libiconv_jll", "Pkg", "Zlib_jll"]
@@ -1906,26 +1880,22 @@ version = "0.9.1+5"
 # ╠═6e2fab73-30a8-4209-ba55-529f9c77cbc3
 # ╠═28dcd70a-952d-492a-84f8-ee04eb83e360
 # ╠═e7cc8d45-4816-4623-9d4e-0d84d78c8fd2
+# ╠═03fa9a1b-2e6a-4189-8f1b-8a702c9dcbf0
+# ╠═df344c5f-06e6-41cf-adf8-63a184445388
+# ╠═4828996d-6084-4279-b4d9-aa52254682c2
 # ╠═65194fa2-a30c-4423-b5c6-eab8507af235
 # ╠═6a2270d4-cb7c-41a1-a300-d87079666145
 # ╠═51d646e9-a066-4068-9598-b9673bdda8f8
 # ╠═cbcbcfac-9e76-4a44-b2a9-40c4e8d089d6
+# ╠═49c346dc-1a3f-4c3e-ab28-68f00c2b7ca1
+# ╠═fe52e576-d533-4a79-9707-ee867ea9df1c
+# ╠═7695a4ff-15d1-4978-8c84-f22bc8cb9ccc
 # ╠═ceebe18c-2e85-4e5a-bcad-437bc60453b7
-# ╠═30f6a587-5ff9-4896-9291-2bdeeb0fdfb8
-# ╠═f4b9b7a9-15d6-496d-87cd-ba86f151a4c7
-# ╠═c4cfe669-215a-47a3-b10f-40153e2aa3b1
-# ╠═2aacef0e-3350-4348-8b33-52e53480e61e
-# ╠═35727206-dde9-4b68-a164-26b1944be296
 # ╠═fbb358fc-95b9-49f1-9737-d2f84c9d5a96
 # ╠═4cfec74c-46de-4281-a8c1-7b5a76ea851f
 # ╠═3f00ecee-2003-4c14-aaa5-d525f3b11607
 # ╠═9f834292-40d4-4e70-a31b-8bb37884176d
-# ╠═5f3e1d6f-fdfa-40bd-8fd8-e7449a09500b
 # ╠═b0105a2a-41f2-4143-8f23-279333d7a31e
-# ╠═f8e44795-de76-46fd-be1b-eeb74f91f59d
 # ╠═f22b494e-f0f9-4058-88f6-29aeac95b2f4
-# ╠═4870ea61-60d6-4274-ab64-567d1105447e
-# ╠═9df4fd20-b57e-4f98-a739-0469bb4990db
-# ╠═5db50468-0098-47e7-a767-902f846cf9c0
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
