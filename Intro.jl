@@ -10,6 +10,16 @@ begin
 	TableOfContents();
 end
 
+# ╔═╡ 2374c5d0-bdad-11ec-1718-05131c0e0731
+begin
+	using ShortCodes
+	references=[
+		DOI("10.1137/070680503"),
+		DOI("10.5281/zenodo.3529808"),
+		DOI("10.21105/joss.01848")
+	]
+end
+
 # ╔═╡ 063322b5-fcb1-48c9-9fd2-8a92101bb44f
 md"""
 
@@ -21,15 +31,15 @@ This is the report of Implementation of Bidomain Model as Formulated in [1], Usn
 Presented and implemented by Alexander Quinlan and Erfan Baradarantohidi
 
 ## Bidomain Model 
-the bidomain  is a system of partial differential equations used to model the propagation of electrical potential waves in myocardium. It is composed of coupled parabolic and eliptic PDEs, as well as at least one ordineary differential equation to model the ion activity through the cardic cell membrance [1].  
+The bidomain  is a system of partial differential equations used to model the propagation of electrical potential waves in myocardium. It is composed of coupled parabolic and eliptic PDEs, as well as at least one ordinary differential equation to model the ion activity through the cardic cell membrance [1].  
 
-As mentioned earlier The electrical properties of the myocardium are generally described by the bidomain equations, a set of coupled parabolic and elliptic partial differential equations (PDEs) that represents the tissue as two separate, distinct continua - one intracellular and the other extracellular. The intracellular and the extracellular media are connected via the cell membrane, and thus the two PDEs are coupled at each point in space through a set of complex, non-linear ordinary differential equations (ODEs), which describe the ionic transport across the cell membrane. Certain modelling environments use the monodomain representation of cardiac activity, which involves solving a single parabolic PDE, by assuming either that the extracellular potentials are negligible, or that the anisotropy ratios are equal in the intracellular and the extracellular domains[3].It worth to mention  
+The electrical properties of the myocardium are generally described by the bidomain equations, a set of coupled parabolic and elliptic partial differential equations (PDEs) that represents the tissue as two separate, distinct continua - one intracellular and the other extracellular. The intracellular and the extracellular media are connected via the cell membrane, and thus the two PDEs are coupled at each point in space through a set of complex, non-linear ordinary differential equations (ODEs), which describe the ionic transport across the cell membrane. Certain modelling environments use the monodomain representation of cardiac activity, which involves solving a single parabolic PDE, by assuming either that the extracellular potentials are negligible, or that the anisotropy ratios are equal in the intracellular and the extracellular domains[3].
  
 """
 
 # ╔═╡ 6c937839-6ac4-4dec-878b-8a18d0f5d6bd
 md"""
-# Biodomain Problem Modeled as a syetem of PDEs
+# Biodomain Problem Modeled as a system of PDEs
 
 
 $u= u_i-u_e, \ u_e \; and \; \ v \;on \: \ Q\times\Omega= [0,\ T=30] \times [0, \ L=70]$
@@ -40,11 +50,9 @@ $\frac{\partial u}{\partial t} -
 
 $\nabla\cdot(\sigma_i\nabla u+(\sigma_i +\sigma_e)\nabla u_e)=0$
 
-$\frac{\partial v}{\partial t} - \epsilon g(u,v)=0$.
+$\frac{\partial v}{\partial t} - \epsilon g(u,v)=0$
 
-with intial and boundary condition:
-
- $u$ and $v$ constatnt at the equiblrium value of the system $f(u,v)=g(u,v)=0$ and $u_e$ constant at $0$ , expect on the interval $[0,L/20]$ where we fix $u$ at a supercritical value, $u(x)=2$  
+We take the initial and boundary conditions $u$ and $v$ constant at the equilibrium value of the system $f(u,v)=g(u,v)=0$ and $u_e$ constant at $0$ , except on the interval $[0,L/20]$ where we fix $u$ at a supercritical value, $u(x)=2$  
 
 So we write :  
 
@@ -59,7 +67,7 @@ Where $f(u,v) = u - \frac{u^3}{3} - v$ and $g(u,v) = u + \beta -\gamma v$
 and Neumann boundary conditions:
 
 $\partial_x u(0)=\partial_x u(L)=0 \;\; and \;\; \partial_x u_e(0)=\partial_x u_e(L)=0$
-since pure neumann boundary condition is ill-posed  to avoide solving a singular system:
+Since pure Neumann boundary conditions are ill-posed, we avoid solving a singular system with:
 $u_e(0)=0.$
 """
 
@@ -85,7 +93,7 @@ $g(u,v) = u + \beta -\gamma v$
 
 # ╔═╡ c7aaa1d6-e85a-4075-9191-a2cca74f163c
 md"""
-### Bidomain as a sysytem of reaction-diffusion system
+### Bidomain as a reaction-diffusion system
 In order to define bidomain problem as a system of $n$ coupled PDEs so that we can handle it to VoronoiFVM we define "**reaction**" $r(u)$, ""**storage"**" $s(u)$, ""**source"**" $f$ and ""**flux"**" $\vec{j}$ in vector form as follows:  
 
  $\partial_t s(u) + \nabla \cdot \vec{j}(u) + r(u) = f$  
@@ -102,7 +110,7 @@ In order to define bidomain problem as a system of $n$ coupled PDEs so that we c
 
  $f = 0$.  
 
- stoarge, recation and flux terms in our system is not dependent on $\vec{x}$ and $t$, but in general they can be.
+ storage, recation and flux terms in our system are not dependent on $\vec{x}$ and $t$, but in general they can be.
 """
 
 # ╔═╡ 90479d25-4018-4074-8e31-fe2ef9d881eb
@@ -233,7 +241,7 @@ As $u_k^n = u(\vec{x_k},n\Delta t)$
 md"""
 ### Second Equation  
 
-After Folloeing same procedure as Dicretization of Equation 1:
+After following same procedure as the discretization of Equation 1:
  Since there is no stoarge term in this equation
   $u_k=u_k^n = u(\vec{x_k},n\Delta t)$
 ```math
@@ -261,7 +269,7 @@ Approximation of Integrals:
 |\omega_k|\frac{\partial v_k}{\partial t} = \eps |\omega_k| (u_k + \beta - \gamma v_k) 
 \end{align*}
 ```
-Then Forward discretizing in time :
+Then forward discretizing in time :
 ```math
 \begin{align*}
 \frac{|\omega_k|}{\Delta t}(v_k^{n+1} - v_k^{n}) - \eps |\omega_k| (u_k^{n} + \beta - \gamma v_k^{n})
@@ -269,16 +277,27 @@ Then Forward discretizing in time :
 ```
 """
 
-# ╔═╡ 2374c5d0-bdad-11ec-1718-05131c0e0731
+# ╔═╡ 5fb78a95-d6bb-45f8-800b-486713d4851a
+md"""
+### Observations
 
+We successfully recreated the 1d problem without much difficulty, but had a lot of trouble recreating the spiral pattern observed in [1]. It turns out that the solution is very sensitive to spatial step-size-- less than roughly 100 cells per L=70 in each dimension would result in an incorrect solution that did not display conductivity in that direction. To avoid this, we ran our spiral solution overnight with N=120x120 and ``\Delta t = 10^{-2}``.
+"""
+
+# ╔═╡ 0a809ed0-9aec-4238-8b21-49eeb6d9c0fb
+md"""
+# Bibliography
+"""
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+ShortCodes = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
 
 [compat]
 PlutoUI = "~0.7.38"
+ShortCodes = "~0.3.3"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -303,6 +322,12 @@ uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
 [[deps.Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
+[[deps.CodecZlib]]
+deps = ["TranscodingStreams", "Zlib_jll"]
+git-tree-sha1 = "ded953804d019afa9a3f98981d99b33e3db7b6da"
+uuid = "944b1d66-785c-5afd-91f1-9de20f533193"
+version = "0.7.0"
+
 [[deps.ColorTypes]]
 deps = ["FixedPointNumbers", "Random"]
 git-tree-sha1 = "024fe24d83e4a5bf5fc80501a314ce0d1aa35597"
@@ -323,6 +348,12 @@ git-tree-sha1 = "335bfdceacc84c5cdf16aadc768aa5ddfc5383cc"
 uuid = "53c48c17-4a7d-5ca2-90c5-79b7896eea93"
 version = "0.8.4"
 
+[[deps.HTTP]]
+deps = ["Base64", "Dates", "IniFile", "Logging", "MbedTLS", "NetworkOptions", "Sockets", "URIs"]
+git-tree-sha1 = "0fa77022fe4b511826b39c894c90daf5fce3334a"
+uuid = "cd3eb016-35fb-5094-929b-558a96fad6f3"
+version = "0.9.17"
+
 [[deps.Hyperscript]]
 deps = ["Test"]
 git-tree-sha1 = "8d511d5b81240fc8e6802386302675bdf47737b9"
@@ -340,6 +371,11 @@ git-tree-sha1 = "f7be53659ab06ddc986428d3a9dcc95f6fa6705a"
 uuid = "b5f81e59-6552-4d32-b1f0-c071b021bf89"
 version = "0.2.2"
 
+[[deps.IniFile]]
+git-tree-sha1 = "f550e6e32074c939295eb5ea6de31849ac2c9625"
+uuid = "83e8ac13-25f8-5344-8a64-a9f2b223428f"
+version = "0.5.1"
+
 [[deps.InteractiveUtils]]
 deps = ["Markdown"]
 uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
@@ -349,6 +385,12 @@ deps = ["Dates", "Mmap", "Parsers", "Unicode"]
 git-tree-sha1 = "3c837543ddb02250ef42f4738347454f95079d4e"
 uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 version = "0.21.3"
+
+[[deps.JSON3]]
+deps = ["Dates", "Mmap", "Parsers", "StructTypes", "UUIDs"]
+git-tree-sha1 = "8c1f668b24d999fb47baf80436194fdccec65ad2"
+uuid = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+version = "1.9.4"
 
 [[deps.LibCURL]]
 deps = ["LibCURL_jll", "MozillaCACerts_jll"]
@@ -376,13 +418,31 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 [[deps.Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
+[[deps.MacroTools]]
+deps = ["Markdown", "Random"]
+git-tree-sha1 = "3d3e902b31198a27340d0bf00d6ac452866021cf"
+uuid = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
+version = "0.5.9"
+
 [[deps.Markdown]]
 deps = ["Base64"]
 uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
 
+[[deps.MbedTLS]]
+deps = ["Dates", "MbedTLS_jll", "Random", "Sockets"]
+git-tree-sha1 = "1c38e51c3d08ef2278062ebceade0e46cefc96fe"
+uuid = "739be429-bea8-5141-9913-cc70e7f3736d"
+version = "1.0.3"
+
 [[deps.MbedTLS_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
+
+[[deps.Memoize]]
+deps = ["MacroTools"]
+git-tree-sha1 = "2b1dfcba103de714d31c033b5dacc2e4a12c7caa"
+uuid = "c03570c3-d221-55d1-a50c-7939bbd78826"
+version = "0.4.4"
 
 [[deps.Mmap]]
 uuid = "a63ad114-7e13-5084-954f-fe012c677804"
@@ -432,6 +492,12 @@ uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 [[deps.Serialization]]
 uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 
+[[deps.ShortCodes]]
+deps = ["Base64", "CodecZlib", "HTTP", "JSON3", "Memoize", "UUIDs"]
+git-tree-sha1 = "0fcc38215160e0a964e9b0f0c25dcca3b2112ad1"
+uuid = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
+version = "0.3.3"
+
 [[deps.Sockets]]
 uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
 
@@ -442,6 +508,12 @@ uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 [[deps.Statistics]]
 deps = ["LinearAlgebra", "SparseArrays"]
 uuid = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+
+[[deps.StructTypes]]
+deps = ["Dates", "UUIDs"]
+git-tree-sha1 = "d24a825a95a6d98c385001212dc9020d609f2d4f"
+uuid = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
+version = "1.8.1"
 
 [[deps.TOML]]
 deps = ["Dates"]
@@ -454,6 +526,17 @@ uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 [[deps.Test]]
 deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
 uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[[deps.TranscodingStreams]]
+deps = ["Random", "Test"]
+git-tree-sha1 = "216b95ea110b5972db65aa90f88d8d89dcb8851c"
+uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
+version = "0.9.6"
+
+[[deps.URIs]]
+git-tree-sha1 = "97bbe755a53fe859669cd907f2d96aee8d2c1355"
+uuid = "5c2747f8-b7ea-4ff2-ba2e-563bfd36b1d4"
+version = "1.3.0"
 
 [[deps.UUIDs]]
 deps = ["Random", "SHA"]
@@ -487,6 +570,8 @@ uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 # ╟─b9d4522b-a589-4a96-befa-ea4ee5ab0fe2
 # ╟─af8bc723-a46a-4621-af80-d3a319da173b
 # ╟─198ec4a6-27dc-41ff-be30-d4e1fe6c35d3
-# ╠═2374c5d0-bdad-11ec-1718-05131c0e0731
+# ╟─5fb78a95-d6bb-45f8-800b-486713d4851a
+# ╟─0a809ed0-9aec-4238-8b21-49eeb6d9c0fb
+# ╟─2374c5d0-bdad-11ec-1718-05131c0e0731
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
