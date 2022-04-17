@@ -17,7 +17,8 @@ end
 # ╔═╡ 2595b432-a4bc-4f64-856b-c44851122a14
 begin 
     using PlutoUI, Plots, Roots , PyPlot, PlutoUI,HypertextLiteral,
-	ExtendableGrids,VoronoiFVM, PlutoVista,GridVisualize,LinearAlgebra, JLD2
+	ExtendableGrids,VoronoiFVM, PlutoVista,GridVisualize,LinearAlgebra, Serialization
+
 	# using DifferentialEquations
 	
 	default_plotter!(PlutoVista)
@@ -46,6 +47,7 @@ begin
 	# L = 70
 	L = 70
 	tf = 70
+	Δt = 1e-1;
 
 	# Storage and replay
 	overwrite_storage = false
@@ -58,18 +60,12 @@ begin
 	# 1d
 	# N = 500; 
 	N = 100
-	Δt = 1e-1;
 end
 
 # ╔═╡ df3a31b9-2a70-44d5-8a7e-5d427dc327cc
 # 2D Parameters
 begin
-	N₂ = (100,25)
 	Δt₂ = 1e-1
-	
-	# longer params:
-	# N₂ = (120,120)
-	# Δt₂ = 1e-2
 end
 
 # ╔═╡ 6dcd9399-8bd2-48a6-8e06-5af201d4f730
@@ -87,17 +83,17 @@ end;
 # ╔═╡ a0249b52-5f13-4d37-9709-a069b065278d
 function u_init(x)
 	u = u₀; v = v₀
-		if 0 ≤ x ≤ L/20
-			u = 2
-		end
-		uₑ = 0
-		return [u, uₑ, v]
+	if 0 ≤ x ≤ L/20
+		u = 2
 	end
+	uₑ = 0
+	return [u, uₑ, v]
+end
 
 # ╔═╡ 9b06c02d-ec46-4590-acac-821733809c6f
 md"""
-### Problrm Implementation in VoronoiFVM
- #### Physic Defintion
+### Problem Implementation in VoronoiFVM
+ #### Physics Defintion
 """
 
 # ╔═╡ bb37d88a-13e4-4a8d-a852-175d34a06afd
@@ -248,11 +244,30 @@ function contour_plot(spec)
 	figure
 end
 
+# ╔═╡ ad2b0f17-789c-47b8-8775-45331823036e
+function contour_2d_at_t(spec, t, Δt, xgrid, sol)
+	tₛ = Int16(round(t/Δt))+1
+	p = scalarplot(
+		xgrid,sol[spec,:,tₛ], Plotter=PyPlot, colormap=:viridis, 
+		title=species[spec]*
+		" at t="*string(t))
+	PyPlot.xlabel(L"x")
+	PyPlot.ylabel(L"y")
+	figure=PyPlot.gcf()
+	figure.set_size_inches(5,5)
+	figure
+end
+
 # ╔═╡ df344c5f-06e6-41cf-adf8-63a184445388
 @bind species_1d PlutoUI.Select([1, 2, 3])
 
 # ╔═╡ 4828996d-6084-4279-b4d9-aa52254682c2
 contour_plot(species_1d)
+
+# ╔═╡ c7b6354b-398f-43cb-b3f1-ab410ecbea02
+md"""
+### 2D Problem
+"""
 
 # ╔═╡ 65194fa2-a30c-4423-b5c6-eab8507af235
 """"
@@ -269,7 +284,7 @@ end
 """
 Initialize the 2d problem
 """
-function u⃗₀_2d(x,y)
+function u_2d(x,y)
 	u = u₀ 
 	v = v₀
 	uₑ = 0
@@ -280,14 +295,6 @@ function u⃗₀_2d(x,y)
 	# 	u = 2
 	# end
 
-	# Classic shrunk/generic
-	# if 0 ≤ x ≤ 2 && 0 ≤ y ≤ 70
-	# 	u = 1
-	# end
-	# if mid - mid/2- 2 ≤ x ≤ mid - mid/2 + 2 && 0 ≤ y ≤ mid
-	# 	v = 1
-	# end
-	
 	# Classic
 	if 0 ≤ x ≤ 3.5 && 0 ≤ y ≤ 70
 		u = 2
@@ -298,6 +305,11 @@ function u⃗₀_2d(x,y)
 	return [u, uₑ, v]
 end
 
+
+# ╔═╡ 54c521f5-2165-442d-baee-64b9f413d99f
+function u_2d_as_1d(x,y)
+	return u_init(x)
+end
 
 # ╔═╡ 51d646e9-a066-4068-9598-b9673bdda8f8
 """
@@ -312,7 +324,7 @@ function bcondition_2d(f)
 end
 
 # ╔═╡ cbcbcfac-9e76-4a44-b2a9-40c4e8d089d6
-function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots)
+function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots, setup="1d")
 	xgrid = grid_2d(N)
     
 	#system Def
@@ -326,17 +338,14 @@ function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots)
 	enable_species!(system, species=[1,2,3])
 	
 	bcondition_2d(system)
-	# system
-
-	# Initial conditions:
-	# inival = map(u_init, grid)
-	# init .= [tuple[k] for tuple in inival, k in 1:3]'
-	# U = unknowns(system)
-
-	# copied
+	
 	init = unknowns(system)
 	U = unknowns(system)
-	inival = map(u⃗₀_2d, xgrid)
+	if setup == "1d"
+		inival = map(u_2d_as_1d, xgrid)
+	else
+		inival = map(u_2d, xgrid)
+	end
 	init .= [tuple[k] for tuple in inival, k in 1:3]'
 
 	# If we want to do the "initial @ 40" that the paper does:
@@ -365,42 +374,16 @@ function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots)
     return xgrid, tgrid, SolArray, vis, system
 end
 
-# ╔═╡ 49c346dc-1a3f-4c3e-ab28-68f00c2b7ca1
-@bind species_replay PlutoUI.Select([1, 2, 3])
+# ╔═╡ af5a7305-7154-4053-8f8c-375c07f141e2
+md"""
+### 2D Problem with 1D Setup
+"""
 
-# ╔═╡ fe52e576-d533-4a79-9707-ee867ea9df1c
-@bind time_replay PlutoUI.Slider(0:tf,show_value=true)
-
-# ╔═╡ ceebe18c-2e85-4e5a-bcad-437bc60453b7
+# ╔═╡ 4d6b1dc5-4a62-4b86-81de-c9a5e4c76d60
 begin
-	if overwrite_storage
-		xgrid₂, tgrid₂, sol₂, vis₂, sys₂ = bidomain_2d(N=N₂,T=tf, Δt=Δt₂, Plotter=PyPlot);
-
-	end
+	N₂ = (100,25)
+	xgrid₂, tgrid₂, sol₂, vis₂, sys₂ = bidomain_2d(N=N₂,T=tf, Δt=Δt₂, Plotter=PyPlot);
 end
-
-# ╔═╡ fbb358fc-95b9-49f1-9737-d2f84c9d5a96
-function contour_2d_at_t(spec, t, Δt, xgrid, sol)
-	tₛ = Int16(round(t/Δt))+1
-	p = scalarplot(
-		xgrid,sol[spec,:,tₛ], Plotter=PyPlot, colormap=:viridis, 
-		title=species[spec]*
-		" at t="*string(t))
-	PyPlot.xlabel(L"x")
-	PyPlot.ylabel(L"y")
-	figure=PyPlot.gcf()
-	figure.set_size_inches(5,5)
-	figure
-end
-
-# ╔═╡ 7695a4ff-15d1-4978-8c84-f22bc8cb9ccc
-contour_2d_at_t(
-	species_replay,
-	time_replay,
-	Δt₂ * compression / 10, # This was run at 1/10 the timestep so dividing by another factor of 10
-	load_object("xgrid.jld2"),
-	load_object("sol.jld2")
-)
 
 # ╔═╡ 4cfec74c-46de-4281-a8c1-7b5a76ea851f
 @bind species_select PlutoUI.Select([1, 2, 3])
@@ -410,6 +393,35 @@ contour_2d_at_t(
 
 # ╔═╡ 9f834292-40d4-4e70-a31b-8bb37884176d
 contour_2d_at_t(species_select,time₂,Δt₂,xgrid₂,sol₂)
+
+# ╔═╡ 07009ae2-b8fa-4f6c-ad76-7a9901d3c304
+md"""
+## 2D Problem with 2D Setup
+#### Using precompiled data
+"""
+
+# ╔═╡ 49c346dc-1a3f-4c3e-ab28-68f00c2b7ca1
+@bind species_replay PlutoUI.Select([1, 2, 3])
+
+# ╔═╡ fe52e576-d533-4a79-9707-ee867ea9df1c
+@bind time_replay PlutoUI.Slider(0:tf,show_value=true)
+
+# ╔═╡ 7695a4ff-15d1-4978-8c84-f22bc8cb9ccc
+contour_2d_at_t(
+	species_replay,
+	time_replay,
+	Δt₂ * compression / 10, # This was run at 1/10 the timestep so dividing by another factor of 10
+	deserialize("xgrid.dat"),
+	deserialize("sol.dat")
+)
+
+# ╔═╡ ceebe18c-2e85-4e5a-bcad-437bc60453b7
+begin
+	if overwrite_storage
+		xgrid3, tgrid3, sol3, vis3, sys3 = bidomain_2d(N=N₂,T=tf, Δt=Δt₂, Plotter=PyPlot, setup="2d");
+
+	end
+end
 
 # ╔═╡ b0105a2a-41f2-4143-8f23-279333d7a31e
 # begin
@@ -434,12 +446,12 @@ contour_2d_at_t(species_select,time₂,Δt₂,xgrid₂,sol₂)
 # Compress (only store every 100 timepts) and save the full solution for graphing
 begin
 	if overwrite_storage # Only store the solution if we really want to overwrite
-		sol_compressed = cat(sol₂[:, :, 1], sol₂[:, :, compression], dims=3)
+		sol_compressed = cat(sol3[:, :, 1], sol3[:, :, compression], dims=3)
 		for i ∈  2:70
-			sol_compressed = cat(sol_compressed, sol₂[:, :, i*compression], dims=3)
+			sol_compressed = cat(sol_compressed, sol3[:, :, i*compression], dims=3)
 		end
-		save_object("sol.jld2", sol_compressed)
-		save_object("xgrid.jld2", xgrid₂)
+		serialize("sol.dat", sol_compressed)
+		serialize("xgrid.dat", xgrid3)
 	end
 end
 
@@ -449,20 +461,19 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 ExtendableGrids = "cfc395e8-590f-11e8-1f13-43a2532b2fa8"
 GridVisualize = "5eed8a63-0fb0-45eb-886d-8d5a387d12b8"
 HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
-JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 PlutoVista = "646e1f28-b900-46d7-9d87-d554eb38a413"
 PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
+Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 VoronoiFVM = "82b139dc-5afc-11e9-35da-9b9bdfd336f3"
 
 [compat]
 ExtendableGrids = "~0.9.5"
 GridVisualize = "~0.5.1"
 HypertextLiteral = "~0.9.3"
-JLD2 = "~0.4.22"
 Plots = "~1.27.5"
 PlutoUI = "~0.7.38"
 PlutoVista = "~0.8.13"
@@ -1867,7 +1878,7 @@ version = "0.9.1+5"
 # ╟─6dcd9399-8bd2-48a6-8e06-5af201d4f730
 # ╠═54b8a5a0-2ca5-4973-b7b4-35d420e675c2
 # ╠═a0249b52-5f13-4d37-9709-a069b065278d
-# ╟─9b06c02d-ec46-4590-acac-821733809c6f
+# ╠═9b06c02d-ec46-4590-acac-821733809c6f
 # ╠═bb37d88a-13e4-4a8d-a852-175d34a06afd
 # ╠═adbc6875-1d0f-4e49-9abd-f12eced388ef
 # ╠═7a367571-9e02-4449-808a-c319997c3df9
@@ -1881,20 +1892,25 @@ version = "0.9.1+5"
 # ╠═28dcd70a-952d-492a-84f8-ee04eb83e360
 # ╠═e7cc8d45-4816-4623-9d4e-0d84d78c8fd2
 # ╠═03fa9a1b-2e6a-4189-8f1b-8a702c9dcbf0
+# ╠═ad2b0f17-789c-47b8-8775-45331823036e
 # ╠═df344c5f-06e6-41cf-adf8-63a184445388
 # ╠═4828996d-6084-4279-b4d9-aa52254682c2
+# ╟─c7b6354b-398f-43cb-b3f1-ab410ecbea02
 # ╠═65194fa2-a30c-4423-b5c6-eab8507af235
 # ╠═6a2270d4-cb7c-41a1-a300-d87079666145
+# ╠═54c521f5-2165-442d-baee-64b9f413d99f
 # ╠═51d646e9-a066-4068-9598-b9673bdda8f8
 # ╠═cbcbcfac-9e76-4a44-b2a9-40c4e8d089d6
+# ╠═af5a7305-7154-4053-8f8c-375c07f141e2
+# ╠═4d6b1dc5-4a62-4b86-81de-c9a5e4c76d60
+# ╠═4cfec74c-46de-4281-a8c1-7b5a76ea851f
+# ╠═3f00ecee-2003-4c14-aaa5-d525f3b11607
+# ╠═9f834292-40d4-4e70-a31b-8bb37884176d
+# ╟─07009ae2-b8fa-4f6c-ad76-7a9901d3c304
 # ╠═49c346dc-1a3f-4c3e-ab28-68f00c2b7ca1
 # ╠═fe52e576-d533-4a79-9707-ee867ea9df1c
 # ╠═7695a4ff-15d1-4978-8c84-f22bc8cb9ccc
 # ╠═ceebe18c-2e85-4e5a-bcad-437bc60453b7
-# ╠═fbb358fc-95b9-49f1-9737-d2f84c9d5a96
-# ╠═4cfec74c-46de-4281-a8c1-7b5a76ea851f
-# ╠═3f00ecee-2003-4c14-aaa5-d525f3b11607
-# ╠═9f834292-40d4-4e70-a31b-8bb37884176d
 # ╠═b0105a2a-41f2-4143-8f23-279333d7a31e
 # ╠═f22b494e-f0f9-4058-88f6-29aeac95b2f4
 # ╟─00000000-0000-0000-0000-000000000001
