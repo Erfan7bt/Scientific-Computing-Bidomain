@@ -17,7 +17,7 @@ end
 # ╔═╡ 2595b432-a4bc-4f64-856b-c44851122a14
 begin 
     using PlutoUI, Plots, Roots , PyPlot, PlutoUI,HypertextLiteral,
-	ExtendableGrids,VoronoiFVM, PlutoVista,GridVisualize,LinearAlgebra, Serialization
+	ExtendableGrids,VoronoiFVM, PlutoVista,GridVisualize,LinearAlgebra, JLD2
 
 	# using DifferentialEquations
 	
@@ -26,6 +26,285 @@ begin
 	pyplot()
 	TableOfContents() # TODO: use
 end;
+
+# ╔═╡ 735ba655-139a-4e74-ac87-2755daaf373f
+begin
+	using ShortCodes
+	references=[
+		DOI("10.1137/070680503"),
+		DOI("10.5281/zenodo.3529808"),
+		DOI("10.21105/joss.01848")
+	]
+end
+
+# ╔═╡ e9d7e1b3-cd57-4e6d-ad95-94b5de379dab
+md"""
+
+# Bidomain Model
+## Introduction
+
+This is the report of Implementation of Bidomain Model as Formulated in [1], Usng **VoronoiFVM.jl** [2], as the Final project of the course "Scienfic Computing" at Techinical University Of Belin in winter semster of 21/22, under Supervision of Dr. Juergen Fuhrmann.  
+
+Presented and implemented by Alexander Quinlan and Erfan Baradarantohidi
+
+## Bidomain Model 
+The bidomain  is a system of partial differential equations used to model the propagation of electrical potential waves in myocardium. It is composed of coupled parabolic and eliptic PDEs, as well as at least one ordinary differential equation to model the ion activity through the cardic cell membrance [1].  
+
+The electrical properties of the myocardium are generally described by the bidomain equations, a set of coupled parabolic and elliptic partial differential equations (PDEs) that represents the tissue as two separate, distinct continua - one intracellular and the other extracellular. The intracellular and the extracellular media are connected via the cell membrane, and thus the two PDEs are coupled at each point in space through a set of complex, non-linear ordinary differential equations (ODEs), which describe the ionic transport across the cell membrane. Certain modelling environments use the monodomain representation of cardiac activity, which involves solving a single parabolic PDE, by assuming either that the extracellular potentials are negligible, or that the anisotropy ratios are equal in the intracellular and the extracellular domains[3].
+ 
+"""
+
+# ╔═╡ 0652ee6a-7705-40e1-ae7b-9dc6b04ce0e6
+md"""
+# Biodomain Problem Modeled as a system of PDEs
+
+
+$u= u_i-u_e, \ u_e \; and \; \ v \;on \: \ Q\times\Omega= [0,\ T=30] \times [0, \ L=70]$
+
+$\frac{\partial u}{\partial t} -
+	\nabla\cdot(\sigma_i(\nabla u+ \nabla u_e))
+     - \frac{1}{\epsilon} f(u,v) = 0$
+
+$\nabla\cdot(\sigma_i\nabla u+(\sigma_i +\sigma_e)\nabla u_e)=0$
+
+$\frac{\partial v}{\partial t} - \epsilon g(u,v)=0$
+
+We take the initial and boundary conditions $u$ and $v$ constant at the equilibrium value of the system $f(u,v)=g(u,v)=0$ and $u_e$ constant at $0$ , except on the interval $[0,L/20]$ where we fix $u$ at a supercritical value, $u(x)=2$  
+
+So we write :  
+
+$u_e(0,x)=0 \:\; \forall x\in \Omega$  
+
+
+$u(0,x)=2 \;\;\forall x \in [0,L/20]$  
+
+$f(u(0,x_1),v(0,x))=g(u(0,x_1),v(0,x))=0 \;\;\forall x_1 \in [L/20,L] \;\; and\;\; \forall x \in [0,L]$
+
+Where $f(u,v) = u - \frac{u^3}{3} - v$ and $g(u,v) = u + \beta -\gamma v$
+and Neumann boundary conditions:
+
+$\partial_x u(0)=\partial_x u(L)=0 \;\; and \;\; \partial_x u_e(0)=\partial_x u_e(L)=0$
+Since pure Neumann boundary conditions are ill-posed, we avoid solving a singular system with:
+$u_e(0)=0.$
+"""
+
+# ╔═╡ b14082d3-2140-48f5-80f7-f539600a5dcc
+md"""
+### What do these variables describe? 
+At each point in the computational domain, two electrical potential:
+- ``u_i`` the **interacellular** potentionial
+- ``u_e`` the **extracellular** potentionial
+are recovered, representing the average of the electrical potential over the extracellular and the interacellular space, recpectively, in the neighborhoods of that point. 
+- ``u=u_i - u_e`` is the **transmembrance** potential
+- ``\sigma_i`` and ``\sigma_e`` are second order tensor, representing **electrical conductivity** in each spatial direcation (in this implementation, it is assumed that conductivity of heart tissue is same in each direction, hence it is constant)
+- ``v`` is a lumped **ionic variable** (the ODE as last equation is not properly part of the bidomain model but rather models the ionic activity across the cellular membrance which is responsible foe electrical activation of the tissue)
+- ``\epsilon`` is a paarmeter linled to the **ratio between the repolarization rate and the tissue excitation rate**
+- function ``f`` and ``g`` :
+
+$f(u,v) = u - \frac{u^3}{3} - v$
+$g(u,v) = u + \beta -\gamma v$
+
+- ``\gamma `` control **ion transport** , ``\beta`` is linked to **cell excitabillity**
+
+"""
+
+# ╔═╡ 4e838ed5-9373-4298-82f5-ca82864545b1
+md"""
+### Bidomain as a reaction-diffusion system
+In order to define bidomain problem as a system of $n$ coupled PDEs so that we can handle it to VoronoiFVM we define "**reaction**" $r(u)$, ""**storage"**" $s(u)$, ""**source"**" $f$ and ""**flux"**" $\vec{j}$ in vector form as follows:  
+
+ $\partial_t s(u) + \nabla \cdot \vec{j}(u) + r(u) = f$  
+
+ $u = \begin{bmatrix} u\\u_e\\v\end{bmatrix}$  
+
+ $s(u) = \begin{bmatrix} u\\0\\v\end{bmatrix}$   
+
+ $\vec{j}(u) = \begin{bmatrix} -\sigma_i(\nabla u+\nabla u_e)\\
+\sigma_i\nabla u + (\sigma_i+\sigma_e)\nabla u_e
+\\0\end{bmatrix}$  
+
+ $r(u) = \begin{bmatrix} -f(u,v)/\epsilon\\0\\ -\epsilon g(u,v)\end{bmatrix}$  
+
+ $f = 0$.  
+
+ storage, recation and flux terms in our system are not dependent on $\vec{x}$ and $t$, but in general they can be.
+"""
+
+# ╔═╡ b1b889d3-e505-438a-b1f9-1c105614ab74
+md"""
+# Discretization over Finite Volumes $\omega_k$:
+#### Constructing control volumes
+We construct and formulate excatly as it was done in the Lecture 
+"""
+
+# ╔═╡ 16399344-0b4f-4f8e-a364-3221448d4c17
+md"""
+  Assume $\Omega\subset \mathbb{R}^d$ is a polygonal domain such that
+  $\partial\Omega=\bigcup_{m\in\mathcal{G}} \Gamma_m$, where $\Gamma_m$ are planar such that $\vec{n}|_{\Gamma_m}=\vec{n}_m$.
+
+  Subdivide $\Omega$ into into a finite number of
+  _control volumes_ 
+  $\bar\Omega= \bigcup_{k\in \mathcal N} \bar \omega_k$
+  such that 
+  
+  -  $\omega_k$ are open  convex domains such that  $\omega_k\cap \omega_l = \emptyset$ if
+    $\omega_k\neq \omega_l$ 
+  -  $\sigma_{kl}=\bar \omega_k \cap \bar \omega_l$ are either empty,
+    points or straight lines.
+    If $|\sigma_{kl}|>0$ we say that $\omega_k$, $\omega_l$
+    are neighbours.
+  -  $\vec{n}_{kl}\perp \sigma_{kl}$: normal of $\partial\omega_k$ at $\sigma_{kl}$
+  -  $\mathcal{N}_k = \{l \in \mathcal{N}: |\sigma_{kl}|>0\}$: set of neighbours of $\omega_k$
+  -  $\gamma_{km}=\partial\omega_k \cap \Gamma_m$: boundary part of $\partial\omega_k$
+  -  $\mathcal{G}_k= \{ m \in \mathcal{G}:  |\gamma_{km}|>0\}$: set of non-empty boundary parts of $\partial\omega_k$.
+
+  
+  $\Rightarrow$ $\partial\omega_k= \left(\cup_{l\in \mathcal{N}_k} \sigma_{kl}\right)\bigcup\left(\cup_{m\in \mathcal{G}_k} \gamma_{km}\right)$
+
+"""
+
+# ╔═╡ 1bddacdb-ae8c-4ca5-8165-246d9a41bc5f
+md"""
+  To each control volume $\omega_k$ assign a _collocation
+    point_: $\vec{x}_k \in \bar \omega_k$ such that\\
+  
+  -  _Admissibility condition_:if $l\in \mathcal N_k$ then the
+    line $\vec{x}_k\vec{x}_l$ is orthogonal to $\sigma_{kl}$
+    
+    -  For a given function $u:\Omega \to \mathbb{R}$ this will allow to associate its value $u_k=u(\vec{x}_k)$
+      as the value of an unknown at $\vec{x}_k$.
+    -  For two neigboring control volumes $\omega_k, \omega_l$ , this will allow to approximate
+      $\vec\nabla u \cdot \vec{n}_{kl} \approx  \frac{u_l - u_k}{h_{kl}}$
+    
+    
+  -  _Placement of boundary unknowns at the boundary_: if
+    $\omega_k$ is situated at the boundary, i.e. for 
+    $|\partial \omega_k \cap \partial \Omega| >0$,
+    then $\vec{x}_k \in \partial\Omega$
+    
+    -  This will allow to apply boundary conditions in a direct manner
+
+"""
+
+# ╔═╡ bf447d84-7ad8-4e9f-bfaa-30789c0532f1
+md"""
+### First Equation 
+For $k\in\mathcal{N}$ Integrate over  each control volume $\omega_k$:
+```math
+\newcommand{\eps}{\varepsilon}
+\newcommand{\pth}[1]{\left(#1\right)}
+
+
+\begin{equation}
+   \int_{\omega_k}\frac{\partial u}{\partial t}=\int_{\omega_k}\frac{1}{\eps}f(u,v)d\omega +\\
+\int_{\omega_k}\nabla \cdot (\sigma_i \nabla u)d\omega + \int_{\omega_k}\nabla \cdot (\sigma_i \nabla u_e)d\omega
+\end{equation}
+```
+By use of Gauss's thereom so the integral of divergence of flux over volume become integral of flux multiply by normal vector over bundary:
+```math
+\begin{align*}
+    \int_{\omega_k}\frac{\partial u}{\partial t} =\int_{\omega_k}\frac{1}{\eps}f(u,v)d\omega +
+    \int_{\partial\omega_k}\sigma_i \nabla u \cdot \vec{n}ds +
+    \int_{\partial\omega_k}\sigma_i \nabla u_e \cdot \vec{n}ds
+\end{align*}
+```
+Since the $\partial\Omega_k$ is either edges in domain boundary $\mathcal{G}_k$ or neighbours $\mathcal{N}_k$ 
+```math
+\begin{align*}
+    \int_{\omega_k}\frac{\partial u}{\partial t} &=\int_{\omega_k}\frac{1}{\eps}f(u,v)d\omega + \sum_{l \in N_k}\int_{\sigma_{kl}} \sigma_i \nabla u \cdot \vec{n}_{kl}ds +
+    \sum_{m \in \mathcal{G}_k}\int_{\gamma_{kl}} \sigma_i \nabla u \cdot \vec{n}_{m}ds \\
+    &+ \sum_{l \in N_k}\int_{\sigma_{kl}} \sigma_i \nabla u_e \cdot \vec{n}_{kl}ds +
+    \sum_{m \in \mathcal{G}_k}\int_{\gamma_{kl}} \sigma_i \nabla u_e \cdot \vec{n}_{m}ds
+\end{align*}
+```
+Finite difference approximation of normal derivative:
+```math
+\begin{align*}
+    h_{kl} = |x_k - x_l|\\
+\sigma_i \nabla u \cdot \vec{n} \approx \sigma_i \frac{u_k - u_l}{h_{kl}}\\
+    \sigma_i \nabla u_e \cdot \vec{n} \approx \sigma_i \frac{u_{e_k} - u_{e_l}}{h_{kl}}
+\end{align*}
+```
+We also approximate integrals by the length of the edge times approximated flux: 
+```math
+\begin{align*}
+|\omega_k|\frac{\partial u_k}{\partial t} &= \int_{w_k}\frac{1}{\eps}(u - \frac{u^3}{3} - v)d\omega + \sum_{l \in N_k} |\sigma_{kl}| \sigma_i  \frac{u_k - u_l}{h_{kl}}  + 
+\sum_{m \in \mathcal{G}_k} |\gamma_{km}| \sigma_i  \frac{u_k - u_l}{h_{kl}}   \\
+&+ \sum_{l \in N_k} |\sigma_{kl}| \sigma_i  \frac{u_{e_k} - u_{e_l}}{h_{kl}}  + 
+\sum_{m \in \mathcal{G}_k} |\gamma_{km}| \sigma_i  \frac{u_{e_k} - u_{e_l}}{h_{kl}}  
+\end{align*}
+```
+ Approximate reaction integral by multiplying $|\omega_k|$ and combining $u$ and $u_e$ sum:
+```math
+\begin{align*}
+|\omega_k|\frac{\partial u_k}{\partial t} &= \frac{|\omega_k|}{\eps}\pth{u_k - \frac{u_k^3}{3} - v_k}+ \sum_{l \in N_k} |\sigma_{kl}| \sigma_i  \frac{u_k - u_l + u_{e_k} - u_{e_l}}{h_{kl}} \\
+&+ \sum_{m \in \mathcal{G}_k} |\gamma_{km}| \sigma_i  \frac{u_k - u_l + u_{e_k} - u_{e_l}}{h_{kl}}  
+\end{align*}
+```
+
+Then discretizing in time in forward Euler method yields:
+```math
+\begin{align}
+\frac{|\omega_k|}{\Delta t}(u_k^{n+1} - u_k^n) = \sum_{l \in N_k} |\sigma_{kl}| \sigma_i \frac{u_k^{n} - u_l^{n} + u_{e_k}^n - u_{e_l}^{n}}{h_{kl}} 
+&+ \frac{|\omega_k|}{\eps}\pth{u_k^{n} - \frac{(u_k^{n})^3}{3} - v_k^{n}}
+\\+
+\sum_{m \in \mathcal{G}_k} |\gamma_{km}| \sigma_i  \frac{u_k^{n} - u_l^{n} + u_{e_k}^{n} - u_{e_l}^{n}}{h_{kl}} 
+\end{align}
+```
+As $u_k^n = u(\vec{x_k},n\Delta t)$
+"""
+
+# ╔═╡ 616e63fa-e7d6-42f1-b332-408a0734b531
+md"""
+### Second Equation  
+
+After following same procedure as the discretization of Equation 1:
+ Since there is no stoarge term in this equation
+  $u_k=u_k^n = u(\vec{x_k},n\Delta t)$
+```math
+\begin{align}
+\sum_{l \in N_k} |\sigma_{kl}| \sigma_i \frac{u_k - u_l}{h_{kl}}
++ \sum_{l \in N_k} |\sigma_{kl}| \pth{\sigma_i+\sigma_e}  \frac{u_{e_k} - u_{e_l}}{h_{kl}}  \\
++\sum_{m \in \mathcal{G}_k} |\gamma_{km}| \sigma_i \frac{u_k - u_l}{h_{kl}}  
++\sum_{m \in \mathcal{G}_k} |\gamma_{km}| (\sigma_i+\sigma_e)  \frac{u_{e_k} - u_{e_l}}{h_{kl}}=0
+\end{align}
+```
+"""
+
+# ╔═╡ 3b4d813c-eca4-4f36-8d89-29b2f9ebbb2b
+md"""
+### Last Equation 
+
+```math
+\begin{align*}
+\int_{\omega_k}\frac{\partial v}{\partial t} d\omega = \int_{\omega_k} \eps(u + \beta - \gamma v)d\omega 
+\end{align*}
+```
+Approximation of Integrals:
+```math
+\begin{align*}
+|\omega_k|\frac{\partial v_k}{\partial t} = \eps |\omega_k| (u_k + \beta - \gamma v_k) 
+\end{align*}
+```
+Then forward discretizing in time :
+```math
+\begin{align*}
+\frac{|\omega_k|}{\Delta t}(v_k^{n+1} - v_k^{n}) - \eps |\omega_k| (u_k^{n} + \beta - \gamma v_k^{n})
+\end{align*}
+```
+"""
+
+# ╔═╡ b5aad722-99cb-424d-a2af-a37cefac1a59
+md"""
+### Observations
+
+We successfully recreated the 1d problem without much difficulty, but had a lot of trouble recreating the spiral pattern observed in [1]. It turns out that the solution is very sensitive to spatial step-size-- less than roughly 100 cells per L=70 in each dimension would result in an incorrect solution that did not display conductivity in that direction. To avoid this, we ran our spiral solution overnight with N=120x120 and ``\Delta t = 10^{-2}``.
+"""
+
+# ╔═╡ daf3c9ee-01ff-494b-a0b0-a6a6560b75cc
+md"""
+# Simulations
+"""
 
 # ╔═╡ 62b11f3a-7d3d-4790-bacf-df10f297888d
 md"""
@@ -58,8 +337,7 @@ end;
 # 1D Parameters
 begin
 	# 1d
-	# N = 500; 
-	N = 100
+	N = 500
 end
 
 # ╔═╡ df3a31b9-2a70-44d5-8a7e-5d427dc327cc
@@ -156,7 +434,7 @@ function grid_1d(N)
 end
 
 # ╔═╡ b38b57f6-ad80-4a50-b8bd-952d4d3e4866
-function bidomain_1D(;N=100, Δt=1e-1, T=30, Plotter=Plots)
+function bidomain_1D(;N=100, Δt=1e-1, tf=30, Plotter=Plots)
 	grid = grid_1d(N)
     
 	#system Def
@@ -182,7 +460,7 @@ function bidomain_1D(;N=100, Δt=1e-1, T=30, Plotter=Plots)
 	
 	U = unknowns(system)
 	SolArray = copy(init)
-	tgrid = 0:Δt:T
+	tgrid = 0:Δt:tf
 	for t ∈ tgrid[2:end]
 		VoronoiFVM.solve!(U, init, system; tstep=Δt)
 		init .= U
@@ -216,12 +494,12 @@ end
 
 # ╔═╡ e7cc8d45-4816-4623-9d4e-0d84d78c8fd2
 begin
-	anim_tf = 15
+	anim_tf = 30
 	step_size =3*Δt
 	anim = @animate for t in 0:step_size:anim_tf
 		plot_at_t(t,vis,xgrid,sol)
 	end
-	gif(anim, "../1D_scalar.gif")
+	gif(anim)
 end
 
 # ╔═╡ 03fa9a1b-2e6a-4189-8f1b-8a702c9dcbf0
@@ -324,7 +602,7 @@ function bcondition_2d(f)
 end
 
 # ╔═╡ cbcbcfac-9e76-4a44-b2a9-40c4e8d089d6
-function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots, setup="1d")
+function bidomain_2d(;N=100, Δt=1e-1, tf=70, Plotter=Plots, setup="1d")
 	xgrid = grid_2d(N)
     
 	#system Def
@@ -347,21 +625,11 @@ function bidomain_2d(;N=100, Δt=1e-1, T=30, Plotter=Plots, setup="1d")
 		inival = map(u_2d, xgrid)
 	end
 	init .= [tuple[k] for tuple in inival, k in 1:3]'
-
-	# If we want to do the "initial @ 40" that the paper does:
-	Tinit_solve=0
-	# Tinit_solve=40  
-	# for t ∈ 0:Δt:Tinit_solve
-	# 	VoronoiFVM.solve!(U, init, system; tstep=Δt)
-	# 	init .= U
-	# end
-	
 	
 	SolArray = copy(init)
 	vis = GridVisualizer(resolution=(400,300), dim=2, Plotter=Plots)
-
 	# tgrid = 0:Δt:T
-	tgrid = (Tinit_solve:Δt:T+Tinit_solve)
+	tgrid = 0:Δt:tf
 	for t ∈ tgrid[2:end]
 		if t % 1 == 0
 			println(string("At t=", t))
@@ -382,7 +650,7 @@ md"""
 # ╔═╡ 4d6b1dc5-4a62-4b86-81de-c9a5e4c76d60
 begin
 	N₂ = (100,25)
-	xgrid₂, tgrid₂, sol₂, vis₂, sys₂ = bidomain_2d(N=N₂,T=tf, Δt=Δt₂, Plotter=PyPlot);
+	xgrid₂, tgrid₂, sol₂, vis₂, sys₂ = bidomain_2d(N=N₂,tf=tf, Δt=Δt₂, Plotter=PyPlot);
 end
 
 # ╔═╡ 4cfec74c-46de-4281-a8c1-7b5a76ea851f
@@ -411,8 +679,8 @@ contour_2d_at_t(
 	species_replay,
 	time_replay,
 	Δt₂ * compression / 10, # This was run at 1/10 the timestep so dividing by another factor of 10
-	deserialize("xgrid.dat"),
-	deserialize("sol.dat")
+	load_object("xgrid.jld2"),
+	load_object("sol.jld2")
 )
 
 # ╔═╡ ceebe18c-2e85-4e5a-bcad-437bc60453b7
@@ -423,25 +691,6 @@ begin
 	end
 end
 
-# ╔═╡ b0105a2a-41f2-4143-8f23-279333d7a31e
-# begin
-# 	tgrid3 = (70:Δt₂:90)
-# 	# tₛ2 = Int16(round(t/Δt₂))+1
-# 	# init = sol₂[:, : , 5001]
-# 	U = sol₂[:, : , 7001]
-# 	sol3 = copy(sol₂)
-# 	for t ∈ tgrid3[1:end]
-# 		if t % 1 == 0
-# 			println(string("At t=", t))
-# 			# contour_2d_at_t(species_select,t,Δt₂,xgrid,SolArray)
-# 		end
-# 		VoronoiFVM.solve!(U, U, sys₂; tstep=Δt₂)
-# 		init .= U
-# 		sol3 = cat(sol3, copy(U), dims=3)
-# 	end
-#     # return xgrid, tgrid, SolArray, vis, sys₂
-# end
-
 # ╔═╡ f22b494e-f0f9-4058-88f6-29aeac95b2f4
 # Compress (only store every 100 timepts) and save the full solution for graphing
 begin
@@ -450,10 +699,15 @@ begin
 		for i ∈  2:70
 			sol_compressed = cat(sol_compressed, sol3[:, :, i*compression], dims=3)
 		end
-		serialize("sol.dat", sol_compressed)
-		serialize("xgrid.dat", xgrid3)
+		save_object("sol.dat", sol_compressed)
+		save_object("xgrid.dat", xgrid3)
 	end
 end
+
+# ╔═╡ 40e01b91-bbc1-41ba-a7b3-72c859fc8ae5
+md"""
+# Bibliography
+"""
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -461,24 +715,27 @@ PLUTO_PROJECT_TOML_CONTENTS = """
 ExtendableGrids = "cfc395e8-590f-11e8-1f13-43a2532b2fa8"
 GridVisualize = "5eed8a63-0fb0-45eb-886d-8d5a387d12b8"
 HypertextLiteral = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 PlutoVista = "646e1f28-b900-46d7-9d87-d554eb38a413"
 PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
-Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
+ShortCodes = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
 VoronoiFVM = "82b139dc-5afc-11e9-35da-9b9bdfd336f3"
 
 [compat]
 ExtendableGrids = "~0.9.5"
 GridVisualize = "~0.5.1"
 HypertextLiteral = "~0.9.3"
+JLD2 = "~0.4.22"
 Plots = "~1.27.5"
 PlutoUI = "~0.7.38"
 PlutoVista = "~0.8.13"
 PyPlot = "~2.10.0"
 Roots = "~2.0.0"
+ShortCodes = "~0.3.3"
 VoronoiFVM = "~0.16.3"
 """
 
@@ -1005,6 +1262,12 @@ git-tree-sha1 = "3c837543ddb02250ef42f4738347454f95079d4e"
 uuid = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 version = "0.21.3"
 
+[[JSON3]]
+deps = ["Dates", "Mmap", "Parsers", "StructTypes", "UUIDs"]
+git-tree-sha1 = "8c1f668b24d999fb47baf80436194fdccec65ad2"
+uuid = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+version = "1.9.4"
+
 [[JpegTurbo_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
 git-tree-sha1 = "b53380851c6e6664204efb2e62cd24fa5c47e4ba"
@@ -1156,6 +1419,12 @@ uuid = "c8ffd9c3-330d-5841-b78e-0817d7145fa1"
 git-tree-sha1 = "e498ddeee6f9fdb4551ce855a46f54dbd900245f"
 uuid = "442fdcdd-2543-5da2-b0f3-8c86c306513e"
 version = "0.3.1"
+
+[[Memoize]]
+deps = ["MacroTools"]
+git-tree-sha1 = "2b1dfcba103de714d31c033b5dacc2e4a12c7caa"
+uuid = "c03570c3-d221-55d1-a50c-7939bbd78826"
+version = "0.4.4"
 
 [[Metatheory]]
 deps = ["AutoHashEquals", "DataStructures", "Dates", "DocStringExtensions", "Parameters", "Reexport", "TermInterface", "ThreadsX", "TimerOutputs"]
@@ -1443,6 +1712,12 @@ version = "0.8.2"
 deps = ["Distributed", "Mmap", "Random", "Serialization"]
 uuid = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
 
+[[ShortCodes]]
+deps = ["Base64", "CodecZlib", "HTTP", "JSON3", "Memoize", "UUIDs"]
+git-tree-sha1 = "0fcc38215160e0a964e9b0f0c25dcca3b2112ad1"
+uuid = "f62ebe17-55c5-4640-972f-b59c0dd11ccf"
+version = "0.3.3"
+
 [[Showoff]]
 deps = ["Dates", "Grisu"]
 git-tree-sha1 = "91eddf657aca81df9ae6ceb20b959ae5653ad1de"
@@ -1525,6 +1800,12 @@ deps = ["Adapt", "DataAPI", "StaticArrays", "Tables"]
 git-tree-sha1 = "57617b34fa34f91d536eb265df67c2d4519b8b98"
 uuid = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 version = "0.6.5"
+
+[[StructTypes]]
+deps = ["Dates", "UUIDs"]
+git-tree-sha1 = "d24a825a95a6d98c385001212dc9020d609f2d4f"
+uuid = "856f2bd8-1eba-4b0a-8007-ebc267875bd4"
+version = "1.8.1"
 
 [[SuiteSparse]]
 deps = ["Libdl", "LinearAlgebra", "Serialization", "SparseArrays"]
@@ -1871,6 +2152,18 @@ version = "0.9.1+5"
 
 # ╔═╡ Cell order:
 # ╠═2595b432-a4bc-4f64-856b-c44851122a14
+# ╟─e9d7e1b3-cd57-4e6d-ad95-94b5de379dab
+# ╟─0652ee6a-7705-40e1-ae7b-9dc6b04ce0e6
+# ╟─b14082d3-2140-48f5-80f7-f539600a5dcc
+# ╟─4e838ed5-9373-4298-82f5-ca82864545b1
+# ╟─b1b889d3-e505-438a-b1f9-1c105614ab74
+# ╟─16399344-0b4f-4f8e-a364-3221448d4c17
+# ╟─1bddacdb-ae8c-4ca5-8165-246d9a41bc5f
+# ╟─bf447d84-7ad8-4e9f-bfaa-30789c0532f1
+# ╟─616e63fa-e7d6-42f1-b332-408a0734b531
+# ╟─3b4d813c-eca4-4f36-8d89-29b2f9ebbb2b
+# ╟─b5aad722-99cb-424d-a2af-a37cefac1a59
+# ╠═daf3c9ee-01ff-494b-a0b0-a6a6560b75cc
 # ╟─62b11f3a-7d3d-4790-bacf-df10f297888d
 # ╠═768f4e8d-a8f4-4f20-8b68-e180521edcff
 # ╠═fb6aa962-a7d6-479b-bf11-52b8be2483f8
@@ -1878,7 +2171,7 @@ version = "0.9.1+5"
 # ╟─6dcd9399-8bd2-48a6-8e06-5af201d4f730
 # ╠═54b8a5a0-2ca5-4973-b7b4-35d420e675c2
 # ╠═a0249b52-5f13-4d37-9709-a069b065278d
-# ╠═9b06c02d-ec46-4590-acac-821733809c6f
+# ╟─9b06c02d-ec46-4590-acac-821733809c6f
 # ╠═bb37d88a-13e4-4a8d-a852-175d34a06afd
 # ╠═adbc6875-1d0f-4e49-9abd-f12eced388ef
 # ╠═7a367571-9e02-4449-808a-c319997c3df9
@@ -1911,7 +2204,8 @@ version = "0.9.1+5"
 # ╠═fe52e576-d533-4a79-9707-ee867ea9df1c
 # ╠═7695a4ff-15d1-4978-8c84-f22bc8cb9ccc
 # ╠═ceebe18c-2e85-4e5a-bcad-437bc60453b7
-# ╠═b0105a2a-41f2-4143-8f23-279333d7a31e
 # ╠═f22b494e-f0f9-4058-88f6-29aeac95b2f4
+# ╠═40e01b91-bbc1-41ba-a7b3-72c859fc8ae5
+# ╠═735ba655-139a-4e74-ac87-2755daaf373f
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
