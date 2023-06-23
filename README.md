@@ -1,1 +1,1 @@
-# SciComp-
+# Final Project of Scientific Computing Course
